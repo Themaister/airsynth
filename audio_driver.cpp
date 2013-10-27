@@ -60,6 +60,8 @@ bool ALSADriver::write(const int16_t *data, unsigned frames)
       auto ret = snd_pcm_writei(pcm, buffer, frames);
       if (ret == -EPIPE || ret == -EINTR || ret == -ESTRPIPE)
       {
+         if (ret == -EPIPE)
+            fprintf(stderr, "[ALSA]: Underrun.\n");
          if (snd_pcm_recover(pcm, ret, 1) < 0)
             return false;
       }

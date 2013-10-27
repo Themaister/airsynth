@@ -19,7 +19,7 @@ AirSynth::~AirSynth()
 
 void AirSynth::set_note(unsigned note, unsigned velocity)
 {
-   omega.store(440.0f * pow(2.0f, (note - 69.0f) / 12.0f) / 44100.0f);
+   omega.store(2.0f * M_PI * 440.0f * pow(2.0f, (note - 69.0f) / 12.0f) / 44100.0f);
    vel.store(velocity / 128.0f);
 }
 
@@ -31,15 +31,14 @@ void AirSynth::set_sustain(bool sustain)
 void AirSynth::mixer_loop()
 {
    int16_t buffer[64];
-   uint64_t phase = 0;
+   double angle = 0.0;
 
    while (!dead.load())
    {
-      float om = omega.load();
-      float v = vel.load();
-      float angle = phase * om;
+      double om = omega.load();
+      double v = vel.load();
 
-      for (unsigned p = 0; p < 64; p++, phase++, angle += om)
+      for (unsigned p = 0; p < 64; p++, angle += om)
          buffer[p] = int16_t(v * sin(angle) * 0x7fff);
 
       audio->write(buffer, 64);

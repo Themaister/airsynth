@@ -1,13 +1,13 @@
 TARGET := midi
 
-SOURCES := $(wildcard *.c)
-OBJECTS := $(SOURCES:.c=.o)
+SOURCES := $(wildcard *.cpp)
+OBJECTS := $(SOURCES:.cpp=.o)
 
-CFLAGS += -O0 -g -Wall -pedantic -std=gnu99 $(shell pkg-config alsa --cflags)
-LDFLAGS += $(shell pkg-config alsa --libs)
+CXXFLAGS += -O0 -g -Wall -pedantic -std=gnu++11 -pedantic $(shell pkg-config alsa --cflags)
+LDFLAGS += $(shell pkg-config alsa --libs) -lm
 
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CXX) -o $@ $^ $(LDFLAGS)
 

@@ -147,7 +147,7 @@ void AirSynth::FM::render(float *out, unsigned samples)
 void AirSynth::FM::reset(unsigned note, unsigned vel)
 {
    float omega = 2.0 * M_PI * 440.0 * pow(2.0, (note - 69.0) / 12.0) / 44100.0;
-   velocity = vel / 128.0f;
+   velocity = vel / 127.0f;
 
    released = false;
    sustained = false;
@@ -158,19 +158,19 @@ void AirSynth::FM::reset(unsigned note, unsigned vel)
    carrier = {};
    modulator = {};
    carrier.omega = omega;
-   modulator.omega = 6.0 * omega;
+   modulator.omega = 2.0 * omega;
 
-   carrier.env.attack = 0.04;
-   carrier.env.delay = 0.05;
-   carrier.env.sustain_level = 0.50;
-   carrier.env.release = 0.50;
+   carrier.env.attack = 0.2;
+   carrier.env.delay = 0.5;
+   carrier.env.sustain_level = 0.80;
+   carrier.env.release = 0.5;
    carrier.env.gain = 1.0;
 
-   modulator.env.attack = 0.20;
-   modulator.env.delay = 0.20;
-   modulator.env.sustain_level = 0.90;
-   modulator.env.release = 0.10;
-   modulator.env.gain = 2.0;
+   modulator.env.attack = 0.2;
+   modulator.env.delay = 1.0;
+   modulator.env.sustain_level = 0.8;
+   modulator.env.release = 0.1;
+   modulator.env.gain = 2.5;
 
    active->store(vel != 0, memory_order_release);
 }
@@ -205,8 +205,7 @@ double AirSynth::FM::Oscillator::step()
 double AirSynth::FM::Oscillator::step(Oscillator &osc, double depth)
 {
    double ret = sin(angle);
-   angle += omega + depth * osc.omega * sin(osc.angle);
-   osc.step();
+   angle += omega + depth * osc.omega * osc.step();
    return ret;
 }
 

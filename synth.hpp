@@ -34,22 +34,42 @@ class AirSynth : public Synthesizer
       std::thread mixer_thread;
       void mixer_loop();
 
-      struct Sine
+      struct FM 
       {
-         Sine() { reset(0, 0); }
+         FM() { reset(0, 0); }
 
          std::unique_ptr<std::atomic_bool> active{new std::atomic_bool};
          unsigned note;
-         double angle;
-         double omega;
          double time;
+
          double time_step = 1.0 / 44100.0;
-         double amp;
          float velocity;
-         double attack;
-         double delay;
-         double release;
-         double sustain_level;
+
+         struct Envelope
+         {
+            double attack = 0.0;
+            double delay = 0.0;
+            double sustain_level = 0.0;
+            double release = 0.0;
+            double amp = 0.0;
+            double gain = 1.0;
+
+            double time_step = 1.0 / 44100.0;
+
+            double envelope(double time, bool released);
+         };
+
+         struct Oscillator
+         {
+            double angle = 0.0;
+            double omega = 0.0;
+            Envelope env;
+
+            double step();
+            double step(Oscillator &osc, double depth);
+         };
+         Oscillator carrier, modulator;
+
          double released_time = 0.0;
 
          bool sustained;
@@ -60,7 +80,7 @@ class AirSynth : public Synthesizer
          void reset(unsigned note, unsigned velocity);
       };
 
-      std::vector<Sine> tones;
+      std::vector<FM> tones;
 
       bool sustain = false;
       std::atomic<bool> dead;

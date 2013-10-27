@@ -42,7 +42,7 @@ void AirSynth::set_note(unsigned note, unsigned velocity)
    else
    {
       auto itr = find_if(begin(tones), end(tones),
-            [](const Sine &t) { return !t.active->load(memory_order_acquire); });
+            [](const FM &t) { return !t.active->load(memory_order_acquire); });
 
       if (itr == end(tones))
       {
@@ -118,72 +118,95 @@ void AirSynth::mixer_loop()
    }
 }
 
-void AirSynth::Sine::render(float *out, unsigned samples)
+void AirSynth::FM::render(float *out, unsigned samples)
 {
    lock_guard<mutex> hold{*lock};
-
-   double attack_deriv = time_step / attack;
-   double delay_deriv = time_step * (sustain_level - 1.0f) / delay;
-   double release_factor = 6.0 * time_step / release;
-   double sustained_time = attack + delay;
 
    unsigned i;
    for (i = 0; i < samples; i++)
    {
-      if (released)
+      if (released && time >= released_time + carrier.env.release)
       {
-         if (time >= released_time + release)
-         {
-            sustained = false;
-            released = false;
-            active->store(false, memory_order_release);
-            fprintf(stderr, "Ended note %u.\n", note);
-            break;
-         }
-         else
-            amp -= amp * release_factor;
-      }
-      else if (time >= sustained_time)
-         amp = sustain_level;
-      else if (time >= delay)
-         amp += delay_deriv;
-      else
-         amp += attack_deriv;
-
-      float sine_res = 0.0f;
-      static const float harmonics[] = {1.0f, 0.29f, 0.35f, 0.11f};
-      double tmp_angle = angle;
-      for (auto harm : harmonics)
-      {
-         sine_res += harm * sin(tmp_angle);
-         tmp_angle += angle;
+         sustained = false;
+         released = false;
+         active->store(false, memory_order_release);
+         //fprintf(stderr, "Ended note %u.\n", note);
+         break;
       }
 
-      out[i] = amp * velocity * sine_res;
-      angle += omega;
+      double env = carrier.env.envelope(time, released);
+      double mod_env = modulator.env.envelope(time, released);
+
+      out[i] = env * velocity * carrier.step(modulator, mod_env);
       time += time_step;
    }
 
    fill(out + i, out + samples, 0.0f);
 }
 
-void AirSynth::Sine::reset(unsigned note, unsigned vel)
+void AirSynth::FM::reset(unsigned note, unsigned vel)
 {
-   omega = 2.0 * M_PI * 440.0 * pow(2.0, (note - 69.0) / 12.0) / 44100.0;
+   float omega = 2.0 * M_PI * 440.0 * pow(2.0, (note - 69.0) / 12.0) / 44100.0;
    velocity = vel / 128.0f;
 
    released = false;
    sustained = false;
-   angle = 0.0;
-   amp = 0.0;
-   time = 0.0;
    this->note = note;
 
-   attack = 0.255;
-   delay = 0.155;
-   release = 0.8;
-   sustain_level = 0.55;
+   time = 0.0;
+
+   carrier = {};
+   modulator = {};
+   carrier.omega = omega;
+   modulator.omega = 6.0 * omega;
+
+   carrier.env.attack = 0.04;
+   carrier.env.delay = 0.05;
+   carrier.env.sustain_level = 0.50;
+   carrier.env.release = 0.50;
+   carrier.env.gain = 1.0;
+
+   modulator.env.attack = 0.20;
+   modulator.env.delay = 0.20;
+   modulator.env.sustain_level = 0.90;
+   modulator.env.release = 0.10;
+   modulator.env.gain = 2.0;
 
    active->store(vel != 0, memory_order_release);
+}
+
+double AirSynth::FM::Envelope::envelope(double time, bool released)
+{
+   if (released)
+   {
+      double release_factor = 6.0 * time_step / release;
+      amp -= amp * release_factor;
+   }
+   else if (time >= attack + delay)
+      amp = sustain_level;
+   else if (time >= attack)
+   {
+      double lerp = (time - attack) / delay;
+      amp = (1.0 - lerp) + sustain_level * lerp;
+   }
+   else
+      amp = time / attack;
+
+   return gain * amp;
+}
+
+double AirSynth::FM::Oscillator::step()
+{
+   double ret = sin(angle);
+   angle += omega;
+   return ret;
+}
+
+double AirSynth::FM::Oscillator::step(Oscillator &osc, double depth)
+{
+   double ret = sin(angle);
+   angle += omega + depth * osc.omega * sin(osc.angle);
+   osc.step();
+   return ret;
 }
 

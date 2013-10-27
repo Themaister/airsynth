@@ -36,29 +36,28 @@ class AirSynth : public Synthesizer
 
       struct Sine
       {
-         bool active = false;
-         unsigned note = 0;
+         Sine() { reset(0, 0); }
 
-         float angle = 0.0f;
-         float velocity = 0.0f;
-         float omega = 0.0f;
+         std::unique_ptr<std::atomic_bool> active{new std::atomic_bool};
+         unsigned note;
+         double angle;
+         double omega;
+         double time;
+         double time_step = 1.0 / 44100.0;
+         double amp;
+         float velocity;
+         double attack;
+         double delay;
+         double release;
+         double sustain_level;
+         double released_time = 0.0;
 
-         float time = 0.0f;
-         float time_step = 1.0f / 44100.0f;
-
-         float amp = 0.0f;
-
-         float attack = 0.015f;
-         float delay = 0.015f;
-         float release = 0.8f;
-         float sustain_level = 0.35f;
-         float released_time = 0.0f;
-
-         bool sustained = false;
-         bool released = false;
+         bool sustained;
+         bool released;
          std::unique_ptr<std::mutex> lock{new std::mutex};
 
          void render(float *out, unsigned samples);
+         void reset(unsigned note, unsigned velocity);
       };
 
       std::vector<Sine> tones;

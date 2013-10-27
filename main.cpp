@@ -166,6 +166,10 @@ class MIDIBuffer
                fprintf(stderr, "[CTRL] #%u, Control: %03u, Val: %03u.\n", channel, lo, hi);
                break;
 
+            case Event::TimingClock:
+            case Event::ActiveSensing:
+               break;
+
             default:
                fprintf(stderr, "[%u] #%u, Lo: %03u, Hi: %03u.\n", (unsigned)event, channel, lo, hi);
          }

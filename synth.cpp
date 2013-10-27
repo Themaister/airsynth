@@ -21,30 +21,38 @@ AirSynth::~AirSynth()
 
 void AirSynth::set_note(unsigned note, unsigned velocity)
 {
-   float omega = 2.0f * M_PI * 440.0f * pow(2.0f, (note - 69.0f) / 12.0f) / 44100.0f;
-   float vel = velocity / 128.0f;
-
-   auto itr = find_if(begin(tones), end(tones), [](const Sine& t) { return !t.active; });
-   if (itr == end(tones))
-      return;
-
-   lock_guard<mutex> lock{*itr->lock};
-   if (itr->active && velocity == 0)
+   if (velocity == 0)
    {
-      if (sustain)
-         itr->sustained = true;
-      else
+      for (auto &tone : tones)
       {
-         itr->released = true;
-         itr->released_time = itr->time;
+         if (tone.active->load(memory_order_acquire) && tone.note == note &&
+               !tone.released && !tone.sustained)
+         {
+            lock_guard<mutex> lock{*tone.lock};
+            if (sustain)
+               tone.sustained = true;
+            else
+            {
+               tone.released = true;
+               tone.released_time = tone.time;
+            }
+         }
       }
    }
    else
    {
-      itr->velocity = vel;
-      itr->active = true;
-      itr->angle = 0.0f;
-      itr->omega = omega;
+      auto itr = find_if(begin(tones), end(tones),
+            [](const Sine &t) { return !t.active->load(memory_order_acquire); });
+
+      if (itr == end(tones))
+      {
+         fprintf(stderr, "Couldn't find any notes for note: %u, vel: %u.\n",
+               note, velocity);
+         return;
+      }
+
+      fprintf(stderr, "Trigger note: %u.\n", note);
+      itr->reset(note, velocity);
    }
 }
 
@@ -56,9 +64,9 @@ void AirSynth::set_sustain(bool sustain)
 
    for (auto &tone : tones)
    {
-      lock_guard<mutex> lock{*tone.lock};
-      if (tone.active && tone.sustained)
+      if (tone.active->load(memory_order_acquire) && tone.sustained)
       {
+         lock_guard<mutex> lock{*tone.lock};
          tone.released = true;
          tone.released_time = tone.time;
          tone.sustained = false;
@@ -70,7 +78,7 @@ void AirSynth::float_to_s16(int16_t *out, const float *in, unsigned samples)
 {
    for (unsigned s = 0; s < samples; s++)
    {
-      int32_t v = int32_t(round(in[s] * 0x7fff));
+      int32_t v = int32_t(round(in[s] * 0.1f * 0x7fff));
       if (v > 0x7fff)
          out[s] = 0x7fff;
       else if (v < -0x8000)
@@ -97,13 +105,11 @@ void AirSynth::mixer_loop()
 
       for (auto &tone : tones)
       {
+         if (!tone.active->load(memory_order_acquire))
+            continue;
+
          float buf[64];
-         {
-            lock_guard<mutex> hold{*tone.lock};
-            if (!tone.active)
-               continue;
-            tone.render(buf, 64);
-         }
+         tone.render(buf, 64);
          mixer_add(buffer, buf, 64);
       }
 
@@ -114,20 +120,24 @@ void AirSynth::mixer_loop()
 
 void AirSynth::Sine::render(float *out, unsigned samples)
 {
-   float attack_deriv = time_step / attack;
-   float delay_deriv = time_step * (-sustain_level + 1.0f) / delay;
-   float release_factor = time_step * release * 6.0f;
-   float sustained_time = attack + delay;
+   lock_guard<mutex> hold{*lock};
+
+   double attack_deriv = time_step / attack;
+   double delay_deriv = time_step * (sustain_level - 1.0f) / delay;
+   double release_factor = 6.0 * time_step / release;
+   double sustained_time = attack + delay;
 
    unsigned i;
    for (i = 0; i < samples; i++)
    {
-      if (released && time >= released_time + release)
+      if (released)
       {
          if (time >= released_time + release)
          {
-            active = false;
             sustained = false;
+            released = false;
+            active->store(false, memory_order_release);
+            fprintf(stderr, "Ended note %u.\n", note);
             break;
          }
          else
@@ -140,11 +150,40 @@ void AirSynth::Sine::render(float *out, unsigned samples)
       else
          amp += attack_deriv;
 
-      out[i] = amp * sin(angle);
+      float sine_res = 0.0f;
+      static const float harmonics[] = {1.0f, 0.29f, 0.35f, 0.11f};
+      double tmp_angle = angle;
+      for (auto harm : harmonics)
+      {
+         sine_res += harm * sin(tmp_angle);
+         tmp_angle += angle;
+      }
+
+      out[i] = amp * velocity * sine_res;
       angle += omega;
       time += time_step;
    }
 
    fill(out + i, out + samples, 0.0f);
+}
+
+void AirSynth::Sine::reset(unsigned note, unsigned vel)
+{
+   omega = 2.0 * M_PI * 440.0 * pow(2.0, (note - 69.0) / 12.0) / 44100.0;
+   velocity = vel / 128.0f;
+
+   released = false;
+   sustained = false;
+   angle = 0.0;
+   amp = 0.0;
+   time = 0.0;
+   this->note = note;
+
+   attack = 0.255;
+   delay = 0.155;
+   release = 0.8;
+   sustain_level = 0.55;
+
+   active->store(vel != 0, memory_order_release);
 }
 

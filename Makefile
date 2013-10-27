@@ -17,3 +17,9 @@ all: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
+clean:
+	rm -f $(TARGET)
+	rm -f $(OBJECTS)
+
+.PHONY: clean
+

@@ -154,6 +154,10 @@ static void midi_cb(enum midi_event event, unsigned channel, uint8_t lo, uint8_t
          fprintf(stderr, "[CTRL] #%u, Control: %03u, Val: %03u.\n", channel, lo, hi);
          break;
 
+      case MIDI_TIMING_CLOCK:
+      case MIDI_ACTIVE_SENSING:
+         break;
+
       default:
          fprintf(stderr, "[%u] #%u, Lo: %03u, Hi: %03u.\n", (unsigned)event, channel, lo, hi);
    }

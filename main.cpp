@@ -90,7 +90,7 @@ class MIDIBuffer
             if (event == Event::None) // Possible desync. Just continue and try to parse on a start byte.
             {
                ptr++;
-               if (buffer[ptr] & 0x80)
+               if (ptr < buffer.size() && (buffer[ptr] & 0x80))
                   last_parsed = ptr;
             }
             else

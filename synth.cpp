@@ -177,7 +177,7 @@ void AirSynth::FM::reset(unsigned channel, unsigned note, unsigned vel)
    active->store(vel != 0);
 }
 
-double AirSynth::FM::Envelope::envelope(double time, bool released)
+double AirSynth::Envelope::envelope(double time, bool released)
 {
    if (released)
    {
@@ -197,14 +197,14 @@ double AirSynth::FM::Envelope::envelope(double time, bool released)
    return gain * amp;
 }
 
-double AirSynth::FM::Oscillator::step()
+double AirSynth::Oscillator::step()
 {
    double ret = sin(angle);
    angle += omega;
    return ret;
 }
 
-double AirSynth::FM::Oscillator::step(Oscillator &osc, double depth)
+double AirSynth::Oscillator::step(Oscillator &osc, double depth)
 {
    double ret = sin(angle);
    angle += omega + depth * osc.omega * osc.step();

@@ -34,6 +34,30 @@ class AirSynth : public Synthesizer
       std::thread mixer_thread;
       void mixer_loop();
 
+      struct Envelope
+      {
+         double attack = 0.0;
+         double delay = 0.0;
+         double sustain_level = 0.0;
+         double release = 0.0;
+         double amp = 0.0;
+         double gain = 1.0;
+
+         double time_step = 1.0 / 44100.0;
+
+         double envelope(double time, bool released);
+      };
+
+      struct Oscillator
+      {
+         double angle = 0.0;
+         double omega = 0.0;
+         Envelope env;
+
+         double step();
+         double step(Oscillator &osc, double depth);
+      };
+
       struct FM 
       {
          FM() { reset(0, 0, 0); }
@@ -46,29 +70,6 @@ class AirSynth : public Synthesizer
          double time_step = 1.0 / 44100.0;
          float velocity;
 
-         struct Envelope
-         {
-            double attack = 0.0;
-            double delay = 0.0;
-            double sustain_level = 0.0;
-            double release = 0.0;
-            double amp = 0.0;
-            double gain = 1.0;
-
-            double time_step = 1.0 / 44100.0;
-
-            double envelope(double time, bool released);
-         };
-
-         struct Oscillator
-         {
-            double angle = 0.0;
-            double omega = 0.0;
-            Envelope env;
-
-            double step();
-            double step(Oscillator &osc, double depth);
-         };
          Oscillator carrier, modulator;
 
          double released_time = 0.0;

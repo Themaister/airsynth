@@ -32,6 +32,7 @@ class AirSynth : public Synthesizer
       void set_sustain(unsigned channel, bool enable) override;
 
    private:
+      std::vector<float> wav_buffer;
       SNDFILE *sndfile = nullptr;
       std::unique_ptr<AudioDriver> audio;
       std::thread mixer_thread;

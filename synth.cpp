@@ -32,8 +32,12 @@ AirSynth::~AirSynth()
    dead.store(true);
    if (mixer_thread.joinable())
       mixer_thread.join();
+
    if (sndfile)
+   {
+      sf_writef_float(sndfile, wav_buffer.data(), wav_buffer.size() / 2);
       sf_close(sndfile);
+   }
 }
 
 void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
@@ -140,7 +144,7 @@ void AirSynth::mixer_loop()
       audio->write(out_buffer, 64);
 
       if (sndfile)
-         sf_writef_float(sndfile, buffer, 64);
+         wav_buffer.insert(end(wav_buffer), buffer, buffer + 2 * 64);
    }
 }
 

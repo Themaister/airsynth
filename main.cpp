@@ -194,20 +194,22 @@ class MIDIBuffer
 
 static void print_help(void)
 {
-   fprintf(stderr, "Usage: midi [-i/--input <MIDI input device>] [-d/--device <audio device>] [-h/--help]\n");
+   fprintf(stderr, "Usage: midi [-i/--input <MIDI input device>] [-d/--device <audio device>] [-o/--output <wav file>] [-h/--help]\n");
 }
 
 static char *midi_device;
 static char *audio_device;
+static char *dump_wav;
 static void parse_cmdline(int argc, char *argv[])
 {
    const struct option opts[] = {
       { "device", 1, NULL, 'd' },
       { "input", 1, NULL, 'i' },
+      { "output", 1, NULL, 'o' },
       { "help", 0, NULL, 'h' },
    };
 
-   const char *optstring = "d:i:h";
+   const char *optstring = "d:i:o:h";
    for (;;)
    {
       int c = getopt_long(argc, argv, optstring, opts, NULL);
@@ -226,6 +228,11 @@ static void parse_cmdline(int argc, char *argv[])
             midi_device = strdup(optarg);
             break;
 
+         case 'o':
+            free(dump_wav);
+            dump_wav = strdup(optarg);
+            break;
+
          case 'h':
             print_help();
             exit(EXIT_SUCCESS);
@@ -235,6 +242,12 @@ static void parse_cmdline(int argc, char *argv[])
             print_help();
             exit(EXIT_FAILURE);
       }
+   }
+
+   if (optind < argc)
+   {
+      print_help();
+      exit(EXIT_FAILURE);
    }
 }
 
@@ -254,7 +267,7 @@ int main(int argc, char *argv[])
    {
       MIDIReader midi_reader{midi_device};
       MIDIBuffer midi_buffer;
-      AirSynth synth{audio_device};
+      AirSynth synth{audio_device, dump_wav};
 
 #define MIDI_BUFFER_SIZE 512
       uint8_t buffer[MIDI_BUFFER_SIZE];

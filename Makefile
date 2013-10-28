@@ -4,8 +4,8 @@ SOURCES := $(wildcard *.cpp)
 OBJECTS := $(SOURCES:.cpp=.o)
 HEADERS := $(wildcard *.hpp)
 
-CXXFLAGS += -Wall -pedantic -std=gnu++11 -pedantic $(shell pkg-config alsa --cflags)
-LDFLAGS += $(shell pkg-config alsa --libs) -lm
+CXXFLAGS += -Wall -pedantic -std=gnu++11 -pedantic $(shell pkg-config alsa sndfile --cflags)
+LDFLAGS += $(shell pkg-config alsa sndfile --libs) -lm
 
 ifeq ($(DEBUG), 1)
    CXXFLAGS += -O0 -g

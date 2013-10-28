@@ -9,6 +9,7 @@
 #include <vector>
 #include <random>
 #include "audio_driver.hpp"
+#include <sndfile.h>
 
 class Synthesizer
 {
@@ -21,7 +22,7 @@ class Synthesizer
 class AirSynth : public Synthesizer
 {
    public:
-      AirSynth(const char *device);
+      AirSynth(const char *device, const char *path);
       ~AirSynth();
 
       AirSynth(AirSynth&&) = delete;
@@ -31,6 +32,7 @@ class AirSynth : public Synthesizer
       void set_sustain(unsigned channel, bool enable) override;
 
    private:
+      SNDFILE *sndfile = nullptr;
       std::unique_ptr<AudioDriver> audio;
       std::thread mixer_thread;
       void mixer_loop();

@@ -6,7 +6,7 @@
 
 using namespace std;
 
-AirSynth::AirSynth(const char *device)
+AirSynth::AirSynth(const char *device, const char *path)
 {
    tones.resize(32);
    for (auto &tone : tones)
@@ -16,6 +16,15 @@ AirSynth::AirSynth(const char *device)
    audio = unique_ptr<AudioDriver>(new ALSADriver(device, 44100, 2));
    dead.store(false);
    mixer_thread = thread(&AirSynth::mixer_loop, this);
+
+   if (path)
+   {
+      SF_INFO info = {0};
+      info.samplerate = 44100;
+      info.channels = 2;
+      info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+      sndfile = sf_open(path, SFM_WRITE, &info);
+   }
 }
 
 AirSynth::~AirSynth()
@@ -23,6 +32,8 @@ AirSynth::~AirSynth()
    dead.store(true);
    if (mixer_thread.joinable())
       mixer_thread.join();
+   if (sndfile)
+      sf_close(sndfile);
 }
 
 void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
@@ -127,6 +138,9 @@ void AirSynth::mixer_loop()
 
       float_to_s16(out_buffer, buffer, 2 * 64);
       audio->write(out_buffer, 64);
+
+      if (sndfile)
+         sf_writef_float(sndfile, buffer, 64);
    }
 }
 

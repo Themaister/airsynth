@@ -49,16 +49,6 @@ class AirSynth : public Synthesizer
          double envelope(double time, bool released);
       };
 
-      struct Oscillator
-      {
-         double angle = 0.0;
-         double omega = 0.0;
-         Envelope env;
-
-         double step();
-         double step(Oscillator &osc, double depth);
-      };
-
       struct Synth
       {
          Synth() { active->store(false); }
@@ -74,8 +64,10 @@ class AirSynth : public Synthesizer
          std::unique_ptr<std::mutex> lock{new std::mutex};
          std::unique_ptr<std::atomic_bool> active{new std::atomic_bool};
 
-         virtual void render(float *out, unsigned samples) = 0;
+         virtual void render(float *out, unsigned frames) = 0;
          virtual void reset(unsigned channel, unsigned note, unsigned velocity);
+
+         bool check_release_complete(double release);
       };
 
       struct PolyphaseBank
@@ -91,22 +83,33 @@ class AirSynth : public Synthesizer
 
       struct NoiseIIR : Synth
       {
+         NoiseIIR();
          Envelope env;
-         std::vector<double> iir_buffer;
-         unsigned iir_ptr = 0;
-         unsigned iir_len = 0;
 
-         void render(float *out, unsigned samples) override;
+         struct IIR
+         {
+            const double *filter = nullptr;
+            std::vector<double> buffer;
+            unsigned ptr = 0;
+            unsigned len = 0;
+            double step(double v);
+            void set_filter(const double *filter, unsigned len);
+            void reset();
+         } iir_l, iir_r;
+
+         void render(float *out, unsigned frames) override;
          void reset(unsigned channel, unsigned note, unsigned velocity) override;
 
          unsigned interpolate_factor = 0;
          unsigned decimate_factor = 0;
          unsigned phase = 0;
-         std::vector<double> history;
+
+         std::vector<double> history_l;
+         std::vector<double> history_r;
          unsigned history_ptr = 0;
          unsigned history_len = 0;
 
-         double noise_step();
+         double noise_step(IIR &iir);
 
          void set_filter_bank(const PolyphaseBank *bank);
          const PolyphaseBank *bank = nullptr;
@@ -115,15 +118,6 @@ class AirSynth : public Synthesizer
          std::uniform_real_distribution<double> dist{-0.01, 0.01};
       };
 
-      struct FM : Synth
-      {
-         Oscillator carrier, modulator;
-
-         void render(float *out, unsigned samples) override;
-         void reset(unsigned channel, unsigned note, unsigned velocity) override;
-      };
-
-      //std::vector<FM> fm_tones;
       std::vector<NoiseIIR> tones;
 
       std::vector<bool> sustain;

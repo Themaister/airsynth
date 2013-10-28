@@ -2,19 +2,18 @@
 #include <cmath>
 #include <algorithm>
 
-#include "flute_iir_300.h"
+#include "flute_iir.h"
 
 using namespace std;
 
 AirSynth::AirSynth(const char *device)
 {
-   //fm_tones.resize(32);
    tones.resize(32);
    for (auto &tone : tones)
       tone.set_filter_bank(&filter_bank);
 
    sustain.resize(16);
-   audio = unique_ptr<AudioDriver>(new ALSADriver(device, 44100, 1));
+   audio = unique_ptr<AudioDriver>(new ALSADriver(device, 44100, 2));
    dead.store(false);
    mixer_thread = thread(&AirSynth::mixer_loop, this);
 }
@@ -109,8 +108,8 @@ void AirSynth::mixer_add(float *out, const float *in, unsigned samples)
 
 void AirSynth::mixer_loop()
 {
-   float buffer[64];
-   int16_t out_buffer[64];
+   float buffer[2 * 64];
+   int16_t out_buffer[2 * 64];
 
    while (!dead.load())
    {
@@ -121,40 +120,14 @@ void AirSynth::mixer_loop()
          if (!tone.active->load())
             continue;
 
-         float buf[64];
+         float buf[2 * 64];
          tone.render(buf, 64);
-         mixer_add(buffer, buf, 64);
+         mixer_add(buffer, buf, 2 * 64);
       }
 
-      float_to_s16(out_buffer, buffer, 64);
+      float_to_s16(out_buffer, buffer, 2 * 64);
       audio->write(out_buffer, 64);
    }
-}
-
-void AirSynth::FM::render(float *out, unsigned samples)
-{
-   lock_guard<mutex> hold{*lock};
-
-   unsigned i;
-   for (i = 0; i < samples; i++)
-   {
-      if (released && time >= released_time + carrier.env.release)
-      {
-         sustained = false;
-         released = false;
-         active->store(false);
-         //fprintf(stderr, "Ended note %u.\n", note);
-         break;
-      }
-
-      double env = carrier.env.envelope(time, released);
-      double mod_env = modulator.env.envelope(time, released);
-
-      out[i] = env * velocity * carrier.step(modulator, mod_env);
-      time += time_step;
-   }
-
-   fill(out + i, out + samples, 0.0f);
 }
 
 void AirSynth::Synth::reset(unsigned channel, unsigned note, unsigned vel)
@@ -170,37 +143,26 @@ void AirSynth::Synth::reset(unsigned channel, unsigned note, unsigned vel)
    active->store(vel != 0);
 }
 
-void AirSynth::FM::reset(unsigned channel, unsigned note, unsigned vel)
+bool AirSynth::Synth::check_release_complete(double release)
 {
-   float omega = 2.0 * M_PI * 440.0 * pow(2.0, (note - 69.0) / 12.0) / 44100.0;
-   carrier = {};
-   modulator = {};
-   carrier.omega = omega;
-   modulator.omega = 2.0 * omega;
-
-   carrier.env.attack = 0.05;
-   carrier.env.delay = 0.1;
-   carrier.env.sustain_level = 0.80;
-   carrier.env.release = 1.0;
-   carrier.env.gain = 1.0;
-
-   modulator.env.attack = 0.2;
-   modulator.env.delay = 1.0;
-   modulator.env.sustain_level = 0.8;
-   modulator.env.release = 0.1;
-   modulator.env.gain = 2.5;
-
-   Synth::reset(channel, note, vel);
+   if (released && time >= released_time + release)
+   {
+      sustained = false;
+      released = false;
+      active->store(false);
+      return true;
+   }
+   else
+      return false;
 }
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 void AirSynth::NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
 {
-   iir_ptr = 0;
-   iir_buffer.clear();
-   iir_len = sizeof(flute_iir_filt) / sizeof(flute_iir_filt[0]);
-   iir_buffer.resize(2 * iir_len);
-
-   history.clear();
+   history_l.clear();
+   history_r.clear();
+   history_l.resize(2 * history_len);
+   history_r.resize(2 * history_len);
    history_ptr = 0;
 
    float offset = note - (69.0f + 7.0f);
@@ -211,57 +173,80 @@ void AirSynth::NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
    env.delay = 0.865 - vel / 220.0;
    env.sustain_level = 0.45;
    env.release = 1.2;
-   env.gain = 0.25 * exp(0.025 * (69.0 - note));
+   env.gain = 0.05 * exp(0.025 * (69.0 - note));
 
    Synth::reset(channel, note, vel);
 }
 
-void AirSynth::NoiseIIR::render(float *out, unsigned samples)
+AirSynth::NoiseIIR::NoiseIIR()
+{
+   iir_l.set_filter(flute_iir_filt_l, ARRAY_SIZE(flute_iir_filt_l));
+   iir_r.set_filter(flute_iir_filt_r, ARRAY_SIZE(flute_iir_filt_r));
+}
+
+void AirSynth::NoiseIIR::render(float *out, unsigned frames)
 {
    unsigned s;
-   for (s = 0; s < samples; s++, phase += decimate_factor)
+   for (s = 0; s < frames; s++, phase += decimate_factor)
    {
-      if (released && time >= released_time + env.release)
-      {
-         sustained = false;
-         released = false;
-         active->store(false);
-         //fprintf(stderr, "Ended note %u.\n", note);
+      if (check_release_complete(env.release))
          break;
-      }
 
       while (phase >= interpolate_factor)
       {
          history_ptr = (history_ptr ? history_ptr : history_len) - 1;
-         history[history_ptr] = history[history_ptr + history_len] = noise_step(); 
+         history_l[history_ptr] = history_l[history_ptr + history_len] = noise_step(iir_l); 
+         history_r[history_ptr] = history_r[history_ptr + history_len] = noise_step(iir_r); 
          phase -= interpolate_factor;
       }
 
       const double *filter = bank->buffer.data() + phase * bank->taps;
-      const double *src = history.data() + history_ptr;
 
-      double res = 0.0;
+      const double *src_l = history_l.data() + history_ptr;
+      const double *src_r = history_r.data() + history_ptr;
+
+      double res_l = 0.0;
+      double res_r = 0.0;
       for (unsigned i = 0; i < history_len; i++)
-         res += filter[i] * src[i];
+      {
+         res_l += filter[i] * src_l[i];
+         res_r += filter[i] * src_r[i];
+      }
 
-      out[s] = env.envelope(time, released) * velocity * res;
+      double env_mod = env.envelope(time, released) * velocity;
+      out[(s << 1) + 0] = env_mod * res_l;
+      out[(s << 1) + 1] = env_mod * res_r;
       time += time_step;
    }
 
-   fill(out + s, out + samples, 0.0f);
+   fill(out + (s << 1), out + (frames << 1), 0.0f);
 }
 
-double AirSynth::NoiseIIR::noise_step()
+double AirSynth::NoiseIIR::IIR::step(double v)
 {
    double res = 0.0;
-   const double *src = iir_buffer.data() + iir_ptr;
-   for (unsigned i = 0; i < iir_len; i++)
-      res += src[i] * flute_iir_filt[i];
-   res = dist(engine) - res;
+   const double *src = buffer.data() + ptr;
+   for (unsigned i = 0; i < len; i++)
+      res += src[i] * filter[i];
+   res += v;
 
-   iir_ptr = (iir_ptr ? iir_ptr : iir_len) - 1;
-   iir_buffer[iir_ptr] = iir_buffer[iir_ptr + iir_len] = res;
+   ptr = (ptr ? ptr : len) - 1;
+   buffer[ptr] = buffer[ptr + len] = res;
    return res;
+}
+
+void AirSynth::NoiseIIR::IIR::set_filter(const double *filter, unsigned len)
+{
+   this->filter = filter;
+   this->len = len;
+   buffer.clear();
+   buffer.resize(2 * len);
+   ptr = 0;
+}
+
+double AirSynth::NoiseIIR::noise_step(IIR &iir)
+{
+   return iir.step(dist(engine));
 }
 
 void AirSynth::NoiseIIR::set_filter_bank(const PolyphaseBank *bank)
@@ -269,8 +254,11 @@ void AirSynth::NoiseIIR::set_filter_bank(const PolyphaseBank *bank)
    this->bank = bank;
    interpolate_factor = bank->phases;
    history_len = bank->taps;
-   history.clear();
-   history.resize(2 * history_len);
+
+   history_l.clear();
+   history_l.resize(2 * history_len);
+   history_r.clear();
+   history_r.resize(2 * history_len);
 }
 
 double AirSynth::Envelope::envelope(double time, bool released)
@@ -291,20 +279,6 @@ double AirSynth::Envelope::envelope(double time, bool released)
       amp = time / attack;
 
    return gain * amp;
-}
-
-double AirSynth::Oscillator::step()
-{
-   double ret = sin(angle);
-   angle += omega;
-   return ret;
-}
-
-double AirSynth::Oscillator::step(Oscillator &osc, double depth)
-{
-   double ret = sin(angle);
-   angle += omega + depth * osc.omega * osc.step();
-   return ret;
 }
 
 double AirSynth::PolyphaseBank::sinc(double v) const

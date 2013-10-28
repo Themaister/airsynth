@@ -25,6 +25,9 @@ AirSynth::AirSynth(const char *device, const char *path)
       info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
       sndfile = sf_open(path, SFM_WRITE, &info);
    }
+
+   if (sndfile)
+      wav_buffer.reserve(256 * 1024 * 1024); // Keep it simple for now. Should be a threaded dump loop.
 }
 
 AirSynth::~AirSynth()

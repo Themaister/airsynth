@@ -7,10 +7,24 @@
 #include <deque>
 #include <stdexcept>
 #include <utility>
+#include <atomic>
+#include <signal.h>
 
 #include "synth.hpp"
 
 using namespace std;
+
+namespace Signal
+{
+   static atomic_bool dead(false);
+   extern "C"
+   {
+      static void handler(int)
+      {
+         dead.store(true);
+      }
+   }
+}
 
 class MIDIReader
 {
@@ -226,6 +240,14 @@ static void parse_cmdline(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+   struct sigaction sa;
+   memset(&sa, 0, sizeof(sa));
+   sa.sa_handler = Signal::handler;
+   sigemptyset(&sa.sa_mask);
+   sa.sa_flags = SA_RESTART;
+   sigaction(SIGINT, &sa, NULL);
+   sigaction(SIGTERM, &sa, NULL);
+
    parse_cmdline(argc, argv);
 
    try
@@ -237,13 +259,14 @@ int main(int argc, char *argv[])
 #define MIDI_BUFFER_SIZE 512
       uint8_t buffer[MIDI_BUFFER_SIZE];
 
-      for (;;)
+      while (!Signal::dead.load())
       {
          unsigned ret = midi_reader.read(buffer, sizeof(buffer));
          midi_buffer.write(buffer, ret);
          midi_buffer.retire_events(synth);
       }
 
+      fprintf(stderr, "Quitting ...\n");
       return EXIT_SUCCESS;
    }
    catch (const exception &e)

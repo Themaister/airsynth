@@ -7,6 +7,7 @@ using namespace std;
 AirSynth::AirSynth(const char *device)
 {
    tones.resize(32);
+   sustain.resize(16);
    audio = unique_ptr<AudioDriver>(new ALSADriver(device, 44100, 1));
    dead.store(false);
    mixer_thread = thread(&AirSynth::mixer_loop, this);
@@ -19,17 +20,17 @@ AirSynth::~AirSynth()
       mixer_thread.join();
 }
 
-void AirSynth::set_note(unsigned note, unsigned velocity)
+void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
 {
    if (velocity == 0)
    {
       for (auto &tone : tones)
       {
-         if (tone.active->load(memory_order_acquire) && tone.note == note &&
-               !tone.released && !tone.sustained)
+         if (tone.active->load() && tone.note == note &&
+               !tone.released && !tone.sustained && tone.channel == channel)
          {
             lock_guard<mutex> lock{*tone.lock};
-            if (sustain)
+            if (sustain[channel])
                tone.sustained = true;
             else
             {
@@ -42,7 +43,7 @@ void AirSynth::set_note(unsigned note, unsigned velocity)
    else
    {
       auto itr = find_if(begin(tones), end(tones),
-            [](const FM &t) { return !t.active->load(memory_order_acquire); });
+            [](const FM &t) { return !t.active->load(); });
 
       if (itr == end(tones))
       {
@@ -52,19 +53,19 @@ void AirSynth::set_note(unsigned note, unsigned velocity)
       }
 
       fprintf(stderr, "Trigger note: %u.\n", note);
-      itr->reset(note, velocity);
+      itr->reset(channel, note, velocity);
    }
 }
 
-void AirSynth::set_sustain(bool sustain)
+void AirSynth::set_sustain(unsigned channel, bool sustain)
 {
-   this->sustain = sustain;
+   this->sustain[channel] = sustain;
    if (sustain)
       return;
 
    for (auto &tone : tones)
    {
-      if (tone.active->load(memory_order_acquire) && tone.sustained)
+      if (tone.active->load() && tone.sustained && tone.channel == channel)
       {
          lock_guard<mutex> lock{*tone.lock};
          tone.released = true;
@@ -105,7 +106,7 @@ void AirSynth::mixer_loop()
 
       for (auto &tone : tones)
       {
-         if (!tone.active->load(memory_order_acquire))
+         if (!tone.active->load())
             continue;
 
          float buf[64];
@@ -129,7 +130,7 @@ void AirSynth::FM::render(float *out, unsigned samples)
       {
          sustained = false;
          released = false;
-         active->store(false, memory_order_release);
+         active->store(false);
          //fprintf(stderr, "Ended note %u.\n", note);
          break;
       }
@@ -144,7 +145,7 @@ void AirSynth::FM::render(float *out, unsigned samples)
    fill(out + i, out + samples, 0.0f);
 }
 
-void AirSynth::FM::reset(unsigned note, unsigned vel)
+void AirSynth::FM::reset(unsigned channel, unsigned note, unsigned vel)
 {
    float omega = 2.0 * M_PI * 440.0 * pow(2.0, (note - 69.0) / 12.0) / 44100.0;
    velocity = vel / 127.0f;
@@ -152,6 +153,7 @@ void AirSynth::FM::reset(unsigned note, unsigned vel)
    released = false;
    sustained = false;
    this->note = note;
+   this->channel = channel;
 
    time = 0.0;
 
@@ -160,10 +162,10 @@ void AirSynth::FM::reset(unsigned note, unsigned vel)
    carrier.omega = omega;
    modulator.omega = 2.0 * omega;
 
-   carrier.env.attack = 0.2;
-   carrier.env.delay = 0.5;
+   carrier.env.attack = 0.05;
+   carrier.env.delay = 0.1;
    carrier.env.sustain_level = 0.80;
-   carrier.env.release = 0.5;
+   carrier.env.release = 1.0;
    carrier.env.gain = 1.0;
 
    modulator.env.attack = 0.2;
@@ -172,7 +174,7 @@ void AirSynth::FM::reset(unsigned note, unsigned vel)
    modulator.env.release = 0.1;
    modulator.env.gain = 2.5;
 
-   active->store(vel != 0, memory_order_release);
+   active->store(vel != 0);
 }
 
 double AirSynth::FM::Envelope::envelope(double time, bool released)

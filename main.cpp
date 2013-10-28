@@ -151,18 +151,18 @@ class MIDIBuffer
          switch (event)
          {
             case Event::NoteOn:
-               synth.set_note(lo, hi);
+               synth.set_note(channel, lo, hi);
                fprintf(stderr, "[ON] #%u, Key: %03u, Vel: %03u.\n", channel, lo, hi);
                break;
 
             case Event::NoteOff: // This doesn't seem to be really used.
-               synth.set_note(lo, 0);
+               synth.set_note(channel, lo, 0);
                fprintf(stderr, "[OFF] #%u, Key: %03u, Vel: %03u.\n", channel, lo, hi);
                break;
 
             case Event::Control:
                if (lo == 64) // Sustain controller on my CP33.
-                  synth.set_sustain(hi);
+                  synth.set_sustain(channel, hi);
                fprintf(stderr, "[CTRL] #%u, Control: %03u, Val: %03u.\n", channel, lo, hi);
                break;
 

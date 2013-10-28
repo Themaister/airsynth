@@ -12,8 +12,8 @@
 class Synthesizer
 {
    public:
-      virtual void set_note(unsigned note, unsigned velocity) = 0;
-      virtual void set_sustain(bool enable) = 0;
+      virtual void set_note(unsigned, unsigned note, unsigned velocity) = 0;
+      virtual void set_sustain(unsigned, bool enable) = 0;
       virtual ~Synthesizer() = default;
 };
 
@@ -26,8 +26,8 @@ class AirSynth : public Synthesizer
       AirSynth(AirSynth&&) = delete;
       void operator=(AirSynth&&) = delete;
 
-      void set_note(unsigned note, unsigned velocity) override;
-      void set_sustain(bool enable) override;
+      void set_note(unsigned channel, unsigned note, unsigned velocity) override;
+      void set_sustain(unsigned channel, bool enable) override;
 
    private:
       std::unique_ptr<AudioDriver> audio;
@@ -36,10 +36,11 @@ class AirSynth : public Synthesizer
 
       struct FM 
       {
-         FM() { reset(0, 0); }
+         FM() { reset(0, 0, 0); }
 
          std::unique_ptr<std::atomic_bool> active{new std::atomic_bool};
          unsigned note;
+         unsigned channel;
          double time;
 
          double time_step = 1.0 / 44100.0;
@@ -77,12 +78,11 @@ class AirSynth : public Synthesizer
          std::unique_ptr<std::mutex> lock{new std::mutex};
 
          void render(float *out, unsigned samples);
-         void reset(unsigned note, unsigned velocity);
+         void reset(unsigned channel, unsigned note, unsigned velocity);
       };
 
       std::vector<FM> tones;
-
-      bool sustain = false;
+      std::vector<bool> sustain;
       std::atomic<bool> dead;
 
       void float_to_s16(int16_t *out, const float *in, unsigned samples);

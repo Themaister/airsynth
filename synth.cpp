@@ -85,11 +85,17 @@ void AirSynth::float_to_s16(int16_t *out, const float *in, unsigned samples)
 {
    for (unsigned s = 0; s < samples; s++)
    {
-      int32_t v = int32_t(round(in[s] * 0.1f * 0x7fff));
+      int32_t v = int32_t(round(in[s] * 0x7fff));
       if (v > 0x7fff)
+      {
+         fprintf(stderr, "Clipping (+): %d.\n", v);
          out[s] = 0x7fff;
+      }
       else if (v < -0x8000)
+      {
+         fprintf(stderr, "Clipping (-): %d.\n", v);
          out[s] = -0x8000;
+      }
       else
          out[s] = v;
    }
@@ -191,21 +197,21 @@ void AirSynth::NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
 {
    iir_ptr = 0;
    iir_buffer.clear();
-   iir_len = sizeof(flute_iir_300) / sizeof(flute_iir_300[0]);
+   iir_len = sizeof(flute_iir_filt) / sizeof(flute_iir_filt[0]);
    iir_buffer.resize(2 * iir_len);
 
    history.clear();
    history_ptr = 0;
 
    float offset = note - (69.0f + 7.0f);
-   decimate_factor = round(interpolate_factor * pow(2.0f, offset / 12.0f));
+   decimate_factor = unsigned(round(interpolate_factor * pow(2.0f, offset / 12.0f)));
    phase = 0;
 
-   env.attack = 0.035;
-   env.delay = 0.035;
-   env.sustain_level = 0.35;
-   env.release = 0.8;
-   env.gain = exp(0.015 * (69.0 - note));
+   env.attack = 0.635 - vel / 220.0;
+   env.delay = 0.865 - vel / 220.0;
+   env.sustain_level = 0.45;
+   env.release = 1.2;
+   env.gain = 0.25 * exp(0.025 * (69.0 - note));
 
    Synth::reset(channel, note, vel);
 }
@@ -226,32 +232,34 @@ void AirSynth::NoiseIIR::render(float *out, unsigned samples)
 
       while (phase >= interpolate_factor)
       {
-         history_ptr = history_ptr ? history_ptr - 1 : history_len - 1;
+         history_ptr = (history_ptr ? history_ptr : history_len) - 1;
          history[history_ptr] = history[history_ptr + history_len] = noise_step(); 
          phase -= interpolate_factor;
       }
 
-      const float *filter = bank->buffer.data() + phase * bank->taps;
-      const float *src = history.data() + history_ptr;
-      float res = 0.0f;
+      const double *filter = bank->buffer.data() + phase * bank->taps;
+      const double *src = history.data() + history_ptr;
+
+      double res = 0.0;
       for (unsigned i = 0; i < history_len; i++)
          res += filter[i] * src[i];
 
-      out[s] = env.envelope(time, released) * res;
+      out[s] = env.envelope(time, released) * velocity * res;
       time += time_step;
    }
 
    fill(out + s, out + samples, 0.0f);
 }
 
-float AirSynth::NoiseIIR::noise_step()
+double AirSynth::NoiseIIR::noise_step()
 {
-   float res = dist(engine);
-   const float *src = iir_buffer.data() + iir_ptr;
+   double res = 0.0;
+   const double *src = iir_buffer.data() + iir_ptr;
    for (unsigned i = 0; i < iir_len; i++)
-      res -= src[i] * flute_iir_300[i];
+      res += src[i] * flute_iir_filt[i];
+   res = dist(engine) - res;
 
-   iir_ptr = iir_ptr ? iir_ptr - 1 : iir_len - 1;
+   iir_ptr = (iir_ptr ? iir_ptr : iir_len) - 1;
    iir_buffer[iir_ptr] = iir_buffer[iir_ptr + iir_len] = res;
    return res;
 }
@@ -269,7 +277,7 @@ double AirSynth::Envelope::envelope(double time, bool released)
 {
    if (released)
    {
-      double release_factor = 6.0 * time_step / release;
+      double release_factor = 8.0 * time_step / release;
       amp -= amp * release_factor;
    }
    else if (time >= attack + delay)
@@ -301,7 +309,7 @@ double AirSynth::Oscillator::step(Oscillator &osc, double depth)
 
 double AirSynth::PolyphaseBank::sinc(double v) const
 {
-   if (fabs(v) < 0.00001)
+   if (fabs(v) < 0.0001)
       return 1.0;
    else
       return sin(v) / v;
@@ -316,8 +324,8 @@ AirSynth::PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases)
    for (int i = 0; i < elems; i++)
    {
       double phase = M_PI * double(i - (elems >> 1)) / phases;
-      double window_phase = 2.0 * phase / taps;
-      tmp[i] = 0.85 * sinc(0.85 * phase) * sinc(window_phase);
+      double window_phase = phase / taps;
+      tmp[i] = 0.75 * sinc(0.75 * phase) * cos(window_phase);
    }
 
    for (unsigned t = 0; t < taps; t++)

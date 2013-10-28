@@ -81,18 +81,18 @@ class AirSynth : public Synthesizer
       struct PolyphaseBank
       {
          PolyphaseBank(unsigned taps, unsigned phases);
-         std::vector<float> buffer;
+         std::vector<double> buffer;
          unsigned taps;
          unsigned phases;
 
          double sinc(double v) const;
       };
-      PolyphaseBank filter_bank{8, 1 << 13};
+      PolyphaseBank filter_bank{64, 1 << 13};
 
       struct NoiseIIR : Synth
       {
          Envelope env;
-         std::vector<float> iir_buffer;
+         std::vector<double> iir_buffer;
          unsigned iir_ptr = 0;
          unsigned iir_len = 0;
 
@@ -102,17 +102,17 @@ class AirSynth : public Synthesizer
          unsigned interpolate_factor = 0;
          unsigned decimate_factor = 0;
          unsigned phase = 0;
-         std::vector<float> history;
+         std::vector<double> history;
          unsigned history_ptr = 0;
          unsigned history_len = 0;
 
-         float noise_step();
+         double noise_step();
 
          void set_filter_bank(const PolyphaseBank *bank);
          const PolyphaseBank *bank = nullptr;
 
          std::default_random_engine engine;
-         std::uniform_real_distribution<float> dist{-0.01f, 0.01f};
+         std::uniform_real_distribution<double> dist{-0.01, 0.01};
       };
 
       struct FM : Synth

@@ -24,9 +24,16 @@ using namespace std;
 
 AirSynth::AirSynth(const char *device, const char *path)
 {
-   tones.resize(32);
-   for (auto &tone : tones)
-      tone.set_filter_bank(&filter_bank);
+   tones_noise.resize(32);
+   for (auto& tone : tones_noise)
+   {
+      tone = unique_ptr<NoiseIIR>(new NoiseIIR);
+      static_cast<NoiseIIR*>(tone.get())->set_filter_bank(&filter_bank);
+   }
+
+   tones_square.resize(32);
+   for (auto& tone : tones_square)
+      tone = unique_ptr<Square>(new Square);
 
    sustain.resize(16);
    audio = unique_ptr<AudioDriver>(new ALSADriver(device, 44100, 2));
@@ -61,20 +68,23 @@ AirSynth::~AirSynth()
 
 void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
 {
+   //auto& tones = note > 60 ? tones_square : tones_noise;
+   auto& tones = tones_square;
+
    if (velocity == 0)
    {
       for (auto &tone : tones)
       {
-         if (tone.active->load() && tone.note == note &&
-               !tone.released && !tone.sustained && tone.channel == channel)
+         if (tone->active->load() && tone->note == note &&
+               !tone->released && !tone->sustained && tone->channel == channel)
          {
-            lock_guard<mutex> lock{*tone.lock};
+            lock_guard<mutex> lock{*tone->lock};
             if (sustain[channel])
-               tone.sustained = true;
+               tone->sustained = true;
             else
             {
-               tone.released = true;
-               tone.released_time = tone.time;
+               tone->released = true;
+               tone->released_time = tone->time;
             }
          }
       }
@@ -82,7 +92,7 @@ void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
    else
    {
       auto itr = find_if(begin(tones), end(tones),
-            [](const NoiseIIR &t) { return !t.active->load(); });
+            [](const unique_ptr<Instrument> &t) { return !t->active->load(); });
 
       if (itr == end(tones))
       {
@@ -92,7 +102,7 @@ void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
       }
 
       fprintf(stderr, "Trigger note: %u.\n", note);
-      itr->reset(channel, note, velocity);
+      (*itr)->reset(channel, note, velocity);
    }
 }
 
@@ -102,16 +112,21 @@ void AirSynth::set_sustain(unsigned channel, bool sustain)
    if (sustain)
       return;
 
-   for (auto &tone : tones)
-   {
-      if (tone.active->load() && tone.sustained && tone.channel == channel)
+   auto release = [channel](vector<unique_ptr<Instrument>>& tones) {
+      for (auto &tone : tones)
       {
-         lock_guard<mutex> lock{*tone.lock};
-         tone.released = true;
-         tone.released_time = tone.time;
-         tone.sustained = false;
+         if (tone->active->load() && tone->sustained && tone->channel == channel)
+         {
+            lock_guard<mutex> lock{*tone->lock};
+            tone->released = true;
+            tone->released_time = tone->time;
+            tone->sustained = false;
+         }
       }
-   }
+   };
+
+   release(tones_noise);
+   release(tones_square);
 }
 
 void AirSynth::float_to_s16(int16_t *out, const float *in, unsigned samples)
@@ -140,24 +155,31 @@ void AirSynth::mixer_add(float *out, const float *in, unsigned samples)
       out[s] += in[s];
 }
 
+void AirSynth::render_synth(const vector<unique_ptr<Instrument>>& synth,
+      float *mix_buffer, float *tmp_buffer, unsigned frames)
+{
+   for (auto &tone : synth)
+   {
+      if (!tone->active->load())
+         continue;
+
+      tone->render(tmp_buffer, frames);
+      mixer_add(mix_buffer, tmp_buffer, 2 * frames);
+   }
+}
+
 void AirSynth::mixer_loop()
 {
    float buffer[2 * 64];
+   float tmp[2 * 64];
    int16_t out_buffer[2 * 64];
 
    while (!dead.load())
    {
       fill(begin(buffer), end(buffer), 0.0f);
 
-      for (auto &tone : tones)
-      {
-         if (!tone.active->load())
-            continue;
-
-         float buf[2 * 64];
-         tone.render(buf, 64);
-         mixer_add(buffer, buf, 2 * 64);
-      }
+      render_synth(tones_noise, buffer, tmp, 64);
+      render_synth(tones_square, buffer, tmp, 64);
 
       float_to_s16(out_buffer, buffer, 2 * 64);
       audio->write(out_buffer, 64);
@@ -167,7 +189,7 @@ void AirSynth::mixer_loop()
    }
 }
 
-void AirSynth::Synth::reset(unsigned channel, unsigned note, unsigned vel)
+void Instrument::reset(unsigned channel, unsigned note, unsigned vel)
 {
    velocity = vel / 127.0f;
 
@@ -180,7 +202,7 @@ void AirSynth::Synth::reset(unsigned channel, unsigned note, unsigned vel)
    active->store(vel != 0);
 }
 
-bool AirSynth::Synth::check_release_complete(double release)
+bool Instrument::check_release_complete(double release)
 {
    if (released && time >= released_time + release)
    {
@@ -193,8 +215,127 @@ bool AirSynth::Synth::check_release_complete(double release)
       return false;
 }
 
+Filter::Filter(vector<float> b, vector<float> a)
+   : b(move(b)), a(move(a))
+{
+   if (this->a.size() < 1)
+      this->a.push_back(1.0f);
+   if (this->b.size() < 1)
+      this->b.push_back(1.0f);
+   reset();
+}
+
+Filter::Filter()
+   : Filter({}, {})
+{}
+
+float Filter::process(float samp)
+{
+   float iir_sum = samp;
+   for (unsigned i = 1; i < a.size(); i++)
+      iir_sum -= a[i] * buffer[i - 1];
+   iir_sum /= a[0];
+
+   buffer.push_front(iir_sum);
+
+   float fir_sum = 0.0f;
+   for (unsigned i = 0; i < b.size(); i++)
+      fir_sum += buffer[i] * b[i];
+
+   buffer.pop_back();
+   return fir_sum;
+}
+
+void Filter::reset()
+{
+   buffer.clear();
+   auto len = max(a.size(), b.size()) - 1;
+   buffer.resize(len);
+}
+
+std::vector<blipper_sample_t> Square::filter_bank;
+Square::Square()
+   : filter({0.0168f, 2.0f * 0.0168f, 0.0168f}, {1.0f, -1.601092, 0.66836f})
+{
+   if (filter_bank.empty())
+      init_filter();
+   blip = blipper_new(256, 0.85, 9.0, 64, 2048, filter_bank.data());
+}
+
+Square::~Square()
+{
+   blipper_free(blip);
+}
+
+Square& Square::operator=(Square&& square)
+{
+   blipper_free(blip);
+   blip = square.blip;
+   env = square.env;
+   delta = square.delta;
+   period = square.period;
+   filter = move(square.filter);
+   square.blip = nullptr;
+   return *this;
+}
+
+Square::Square(Square&& square)
+{
+   *this = move(square);
+}
+
+void Square::init_filter()
+{
+   blipper_sample_t *filt = blipper_create_filter_bank(64, 256, 0.85, 9.0);
+   filter_bank.insert(end(filter_bank), filt, filt + 256 * 64);
+   free(filt);
+}
+
+void Square::reset(unsigned channel, unsigned note, unsigned velocity)
+{
+   double freq = 440.0 * pow(2.0f, (note - 69.0) / 12.0);
+
+   period = unsigned(round(44100.0 * 64 / (2.0 * freq))); 
+
+   delta = 0.5f;
+   blipper_reset(blip);
+   blipper_push_delta(blip, -0.25f, 0);
+
+   env.attack = 0.60;
+   env.delay = 0.60;
+   env.sustain_level = 0.55;
+   env.release = 0.8;
+
+   Instrument::reset(channel, note, velocity);
+}
+
+void Square::render(float *out, unsigned frames)
+{
+   while (blipper_read_avail(blip) < frames)
+   {
+      blipper_push_delta(blip, delta, period);
+      delta = -delta;
+   }
+
+   unsigned s;
+   for (s = 0; s < frames; s++)
+   {
+      if (check_release_complete(env.release))
+         break;
+
+      blipper_sample_t val = 0;
+      blipper_read(blip, &val, 1, 1);
+      //fprintf(stderr, "Val: %d.\n", val);
+      out[(s << 1) + 0] = out[(s << 1) + 1] = filter.process(val) * env.envelope(time, released) * velocity;
+
+      time += time_step;
+   }
+
+   fill(out + (s << 1), out + (frames << 1), 0.0f);
+}
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-void AirSynth::NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
+void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
 {
    history_l.clear();
    history_r.clear();
@@ -212,16 +353,16 @@ void AirSynth::NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
    env.release = 1.2;
    env.gain = 0.05 * exp(0.025 * (69.0 - note));
 
-   Synth::reset(channel, note, vel);
+   Instrument::reset(channel, note, vel);
 }
 
-AirSynth::NoiseIIR::NoiseIIR()
+NoiseIIR::NoiseIIR()
 {
    iir_l.set_filter(flute_iir_filt_l, ARRAY_SIZE(flute_iir_filt_l));
    iir_r.set_filter(flute_iir_filt_r, ARRAY_SIZE(flute_iir_filt_r));
 }
 
-void AirSynth::NoiseIIR::render(float *out, unsigned frames)
+void NoiseIIR::render(float *out, unsigned frames)
 {
    unsigned s;
    for (s = 0; s < frames; s++, phase += decimate_factor)
@@ -259,7 +400,7 @@ void AirSynth::NoiseIIR::render(float *out, unsigned frames)
    fill(out + (s << 1), out + (frames << 1), 0.0f);
 }
 
-double AirSynth::NoiseIIR::IIR::step(double v)
+double NoiseIIR::IIR::step(double v)
 {
    double res = 0.0;
    const double *src = buffer.data() + ptr;
@@ -272,7 +413,7 @@ double AirSynth::NoiseIIR::IIR::step(double v)
    return res;
 }
 
-void AirSynth::NoiseIIR::IIR::set_filter(const double *filter, unsigned len)
+void NoiseIIR::IIR::set_filter(const double *filter, unsigned len)
 {
    this->filter = filter;
    this->len = len;
@@ -281,12 +422,12 @@ void AirSynth::NoiseIIR::IIR::set_filter(const double *filter, unsigned len)
    ptr = 0;
 }
 
-double AirSynth::NoiseIIR::noise_step(IIR &iir)
+double NoiseIIR::noise_step(IIR &iir)
 {
    return iir.step(dist(engine));
 }
 
-void AirSynth::NoiseIIR::set_filter_bank(const PolyphaseBank *bank)
+void NoiseIIR::set_filter_bank(const PolyphaseBank *bank)
 {
    this->bank = bank;
    interpolate_factor = bank->phases;
@@ -298,7 +439,7 @@ void AirSynth::NoiseIIR::set_filter_bank(const PolyphaseBank *bank)
    history_r.resize(2 * history_len);
 }
 
-double AirSynth::Envelope::envelope(double time, bool released)
+double Envelope::envelope(double time, bool released)
 {
    if (released)
    {
@@ -318,7 +459,7 @@ double AirSynth::Envelope::envelope(double time, bool released)
    return gain * amp;
 }
 
-double AirSynth::PolyphaseBank::sinc(double v) const
+double PolyphaseBank::sinc(double v) const
 {
    if (fabs(v) < 0.0001)
       return 1.0;
@@ -326,7 +467,7 @@ double AirSynth::PolyphaseBank::sinc(double v) const
       return sin(v) / v;
 }
 
-AirSynth::PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases)
+PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases)
    : taps(taps), phases(phases)
 {
    buffer.resize(taps * phases);

@@ -23,9 +23,12 @@
 #include <memory>
 #include <cstdint>
 #include <vector>
+#include <deque>
 #include <random>
 #include "audio_driver.hpp"
 #include <sndfile.h>
+
+#include "blipper.h"
 
 class Synthesizer
 {
@@ -33,6 +36,129 @@ class Synthesizer
       virtual void set_note(unsigned, unsigned note, unsigned velocity) = 0;
       virtual void set_sustain(unsigned, bool enable) = 0;
       virtual ~Synthesizer() = default;
+};
+
+struct Instrument
+{
+   Instrument() { active->store(false); }
+   unsigned note = 0;
+   unsigned channel = 0;
+   double time = 0;
+   double time_step = 1.0 / 44100.0;
+   double released_time = 0.0;
+
+   bool sustained = false;
+   bool released = false;
+   float velocity = 0.0f;
+   std::unique_ptr<std::mutex> lock{new std::mutex};
+   std::unique_ptr<std::atomic_bool> active{new std::atomic_bool};
+
+   virtual void render(float *out, unsigned frames) = 0;
+   virtual void reset(unsigned channel, unsigned note, unsigned velocity);
+
+   bool check_release_complete(double release);
+};
+
+struct Envelope
+{
+   double attack = 0.0;
+   double delay = 0.0;
+   double sustain_level = 0.0;
+   double release = 0.0;
+   double amp = 0.0;
+   double gain = 1.0;
+
+   double time_step = 1.0 / 44100.0;
+
+   double envelope(double time, bool released);
+};
+
+struct PolyphaseBank
+{
+   PolyphaseBank(unsigned taps, unsigned phases);
+   std::vector<double> buffer;
+   unsigned taps;
+   unsigned phases;
+
+   double sinc(double v) const;
+};
+
+class NoiseIIR : public Instrument
+{
+   public:
+      NoiseIIR();
+
+      void render(float *out, unsigned frames) override;
+      void reset(unsigned channel, unsigned note, unsigned velocity) override;
+      void set_filter_bank(const PolyphaseBank *bank);
+
+   private:
+      struct IIR
+      {
+         const double *filter = nullptr;
+         std::vector<double> buffer;
+         unsigned ptr = 0;
+         unsigned len = 0;
+         double step(double v);
+         void set_filter(const double *filter, unsigned len);
+         void reset();
+      } iir_l, iir_r;
+
+      Envelope env;
+
+      unsigned interpolate_factor = 0;
+      unsigned decimate_factor = 0;
+      unsigned phase = 0;
+
+      std::vector<double> history_l;
+      std::vector<double> history_r;
+      unsigned history_ptr = 0;
+      unsigned history_len = 0;
+
+      double noise_step(IIR &iir);
+
+      const PolyphaseBank *bank = nullptr;
+
+      std::default_random_engine engine;
+      std::uniform_real_distribution<double> dist{-0.01, 0.01};
+};
+
+class Filter 
+{
+   public:
+      Filter();
+      Filter(std::vector<float> b, std::vector<float> a);
+      float process(float samp);
+      void reset();
+
+   private:
+      std::vector<float> b, a;
+      std::deque<float> buffer;
+};
+
+class Square : public Instrument
+{
+   public:
+      Square();
+      ~Square();
+
+      Square(Square&&);
+      Square& operator=(Square&&);
+
+      void render(float *out, unsigned frames) override;
+      void reset(unsigned channel, unsigned note, unsigned velocity) override;
+
+   private:
+      blipper_t *blip = nullptr;
+      Envelope env;
+
+      float delta;
+      unsigned period;
+
+      static std::vector<blipper_sample_t> filter_bank;
+      static void init_filter();
+
+      Filter filter;
 };
 
 class AirSynth : public Synthesizer
@@ -54,96 +180,19 @@ class AirSynth : public Synthesizer
       std::thread mixer_thread;
       void mixer_loop();
 
-      struct Envelope
-      {
-         double attack = 0.0;
-         double delay = 0.0;
-         double sustain_level = 0.0;
-         double release = 0.0;
-         double amp = 0.0;
-         double gain = 1.0;
-
-         double time_step = 1.0 / 44100.0;
-
-         double envelope(double time, bool released);
-      };
-
-      struct Synth
-      {
-         Synth() { active->store(false); }
-         unsigned note = 0;
-         unsigned channel = 0;
-         double time = 0;
-         double time_step = 1.0 / 44100.0;
-         double released_time = 0.0;
-
-         bool sustained = false;
-         bool released = false;
-         float velocity = 0.0f;
-         std::unique_ptr<std::mutex> lock{new std::mutex};
-         std::unique_ptr<std::atomic_bool> active{new std::atomic_bool};
-
-         virtual void render(float *out, unsigned frames) = 0;
-         virtual void reset(unsigned channel, unsigned note, unsigned velocity);
-
-         bool check_release_complete(double release);
-      };
-
-      struct PolyphaseBank
-      {
-         PolyphaseBank(unsigned taps, unsigned phases);
-         std::vector<double> buffer;
-         unsigned taps;
-         unsigned phases;
-
-         double sinc(double v) const;
-      };
       PolyphaseBank filter_bank{64, 1 << 13};
 
-      struct NoiseIIR : Synth
-      {
-         NoiseIIR();
-         Envelope env;
+      std::vector<std::unique_ptr<Instrument>> tones_noise;
+      std::vector<std::unique_ptr<Instrument>> tones_square;
 
-         struct IIR
-         {
-            const double *filter = nullptr;
-            std::vector<double> buffer;
-            unsigned ptr = 0;
-            unsigned len = 0;
-            double step(double v);
-            void set_filter(const double *filter, unsigned len);
-            void reset();
-         } iir_l, iir_r;
-
-         void render(float *out, unsigned frames) override;
-         void reset(unsigned channel, unsigned note, unsigned velocity) override;
-
-         unsigned interpolate_factor = 0;
-         unsigned decimate_factor = 0;
-         unsigned phase = 0;
-
-         std::vector<double> history_l;
-         std::vector<double> history_r;
-         unsigned history_ptr = 0;
-         unsigned history_len = 0;
-
-         double noise_step(IIR &iir);
-
-         void set_filter_bank(const PolyphaseBank *bank);
-         const PolyphaseBank *bank = nullptr;
-
-         std::default_random_engine engine;
-         std::uniform_real_distribution<double> dist{-0.01, 0.01};
-      };
-
-      std::vector<NoiseIIR> tones;
+      void render_synth(const std::vector<std::unique_ptr<Instrument>>& synth,
+            float *mix_buffer, float *tmp_buffer, unsigned frames);
 
       std::vector<bool> sustain;
       std::atomic<bool> dead;
 
-      void float_to_s16(int16_t *out, const float *in, unsigned samples);
-      void mixer_add(float *out, const float *in, unsigned samples);
+      static void float_to_s16(int16_t *out, const float *in, unsigned samples);
+      static void mixer_add(float *out, const float *in, unsigned samples);
 };
 
 #endif

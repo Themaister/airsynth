@@ -31,7 +31,7 @@ AirSynth::AirSynth(const char *device, const char *path)
       static_cast<NoiseIIR*>(tone.get())->set_filter_bank(&filter_bank);
    }
 
-   tones_square.resize(32);
+   tones_square.resize(256);
    for (auto& tone : tones_square)
       tone = unique_ptr<Square>(new Square);
 
@@ -301,10 +301,10 @@ void Square::reset(unsigned channel, unsigned note, unsigned velocity)
    blipper_reset(blip);
    blipper_push_delta(blip, -0.25f, 0);
 
-   env.attack = 0.60;
-   env.delay = 0.60;
-   env.sustain_level = 0.55;
-   env.release = 0.8;
+   env.attack = 0.10;
+   env.delay = 0.10;
+   env.sustain_level = 0.05;
+   env.release = 0.2;
 
    Instrument::reset(channel, note, velocity);
 }

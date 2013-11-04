@@ -283,7 +283,8 @@ int main(int argc, char *argv[])
    {
       MIDIReader midi_reader{midi_device};
       MIDIBuffer midi_buffer;
-      AirSynth synth{audio_device, dump_wav};
+      shared_ptr<Synthesizer> synth = make_shared<AirSynth>(dump_wav);
+      AudioThreadLoop loop{synth, make_shared<ALSADriver>(audio_device, 44100, 2)};
 
 #define MIDI_BUFFER_SIZE 512
       uint8_t buffer[MIDI_BUFFER_SIZE];
@@ -292,7 +293,7 @@ int main(int argc, char *argv[])
       {
          unsigned ret = midi_reader.read(buffer, sizeof(buffer));
          midi_buffer.write(buffer, ret);
-         midi_buffer.retire_events(synth);
+         midi_buffer.retire_events(*synth);
       }
 
       fprintf(stderr, "Quitting ...\n");

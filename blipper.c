@@ -31,6 +31,8 @@
 #include <string.h>
 #include <math.h>
 
+#define BLIPPER_FILTER_AMP 0.75
+
 #if BLIPPER_LOG_PERFORMANCE
 #include <time.h>
 static double get_time(void)
@@ -55,6 +57,7 @@ struct blipper
    unsigned taps;
 
    blipper_long_sample_t integrator;
+   blipper_long_sample_t ramp;
    blipper_sample_t last_sample;
 
 #if BLIPPER_LOG_PERFORMANCE
@@ -152,6 +155,17 @@ static blipper_real_t *blipper_create_sinc(unsigned phases, unsigned taps,
    return filter;
 }
 
+void blipper_set_ramp(blipper_t *blip, blipper_long_sample_t delta,
+      unsigned clocks)
+{
+   blipper_real_t ramp = BLIPPER_FILTER_AMP * delta * blip->phases / clocks;
+#if BLIPPER_FIXED_POINT
+   blip->ramp = (blipper_long_sample_t)round(ramp * 0x8000);
+#else
+   blip->ramp = ramp;
+#endif
+}
+
 /* We differentiate and integrate at different sample rates.
  * Differentiation is D(z) = 1 - z^-1 and happens when delta impulses
  * are convolved. Integration step after decimation by D is 1 / (1 - z^-D).
@@ -167,7 +181,7 @@ static blipper_real_t *blipper_prefilter_sinc(blipper_real_t *filter, unsigned p
       unsigned taps)
 {
    unsigned i;
-   float filter_amp = 0.75f / phases;
+   float filter_amp = BLIPPER_FILTER_AMP / phases;
    blipper_real_t *tmp_filter;
    blipper_real_t *new_filter = (blipper_real_t*)malloc((phases * taps + phases) * sizeof(*filter));
    if (!new_filter)
@@ -300,6 +314,7 @@ void blipper_reset(blipper_t *blip)
    blip->output_avail = 0;
    blip->last_sample = 0;
    blip->integrator = 0;
+   blip->ramp = 0;
 }
 
 blipper_t *blipper_new(unsigned taps, double cutoff, double beta,
@@ -420,6 +435,7 @@ void blipper_read(blipper_t *blip, blipper_sample_t *output, unsigned samples,
    unsigned s;
    blipper_long_sample_t sum = blip->integrator;
    const blipper_long_sample_t *out = blip->output_buffer;
+   blipper_long_sample_t ramp = blip->ramp;
 
 #if BLIPPER_LOG_PERFORMANCE
    double t0 = get_time();
@@ -433,7 +449,7 @@ void blipper_read(blipper_t *blip, blipper_sample_t *output, unsigned samples,
       /* Cannot overflow. Also add a leaky integrator.
          Mitigates DC shift numerical instability which is
          inherent for integrators. */
-      sum += (out[s] >> 1) - (sum >> 9);
+      sum += ((out[s] + ramp) >> 1) - (sum >> 9);
 
       /* Rounded. With leaky integrator, this cannot overflow. */
       quant = (sum + 0x4000) >> 15;
@@ -452,7 +468,7 @@ void blipper_read(blipper_t *blip, blipper_sample_t *output, unsigned samples,
    for (s = 0; s < samples; s++, output += stride)
    {
       /* Leaky integrator, same as fixed point (1.0f / 512.0f) */
-      sum += out[s] - sum * 0.00195f;
+      sum += out[s] + ramp - sum * 0.00195f;
       *output = sum;
    }
 #endif

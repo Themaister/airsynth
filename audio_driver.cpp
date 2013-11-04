@@ -43,7 +43,7 @@ bool ALSADriver::init(const char *device, unsigned rate, unsigned channels)
    snd_pcm_hw_params_t *params = NULL;
    snd_pcm_hw_params_alloca(&params);
 
-   unsigned latency_usec = 8000;
+   unsigned latency_usec = 12000;
    unsigned periods = 4;
 
    if (snd_pcm_hw_params_any(pcm, params) < 0)

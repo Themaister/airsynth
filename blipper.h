@@ -125,6 +125,17 @@ blipper_sample_t *blipper_create_filter_bank(unsigned decimation,
 #define blipper_free BLIPPER_MANGLE(blipper_free)
 void blipper_free(blipper_t *blip);
 
+/* Add a ramp to the synthesized wave. The ramp is added to the integrator
+ * on every input sample.
+ * The amount added is delta / clocks per input sample.
+ * The interface is fractional to have better accuract with fixed point.
+ * This can be combined with a delta train to synthesize e.g. sawtooth waves.
+ * When using a ramp, care must be taken to ensure that the integrator does not saturate.
+ * It is recommended to use floating point implementation when using the ramp. */
+#define blipper_set_ramp BLIPPER_MANGLE(blipper_set_ramp)
+void blipper_set_ramp(blipper_t *blip, blipper_long_sample_t delta,
+      unsigned clocks);
+
 /* Data pushing interfaces. One of these should be used exclusively. */
 
 /* Push a single delta, which occurs clock_step input samples after the

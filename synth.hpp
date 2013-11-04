@@ -33,9 +33,41 @@
 class Synthesizer
 {
    public:
+      virtual void set_format(unsigned sample_rate, unsigned max_frames, unsigned channels)
+      {
+         mix_buffer.resize(max_frames * channels);
+         this->channels = channels;
+         this->sample_rate = sample_rate;
+      }
+
+      virtual void render(float *buffer, unsigned frames) = 0;
       virtual void set_note(unsigned, unsigned note, unsigned velocity) = 0;
       virtual void set_sustain(unsigned, bool enable) = 0;
       virtual ~Synthesizer() = default;
+
+   protected:
+      std::vector<float> mix_buffer;
+      unsigned channels = 1;
+      unsigned sample_rate = 44100;
+
+      static void mixer_add(float *out, const float *in, unsigned samples);
+};
+
+class AudioThreadLoop
+{
+   public:
+      AudioThreadLoop(std::shared_ptr<Synthesizer> synth,
+            std::shared_ptr<AudioDriver> driver);
+      ~AudioThreadLoop();
+
+   private:
+      std::shared_ptr<Synthesizer> synth;
+      std::shared_ptr<AudioDriver> driver;
+
+      std::thread mixer_thread;
+      void mixer_loop();
+      static void float_to_s16(int16_t *out, const float *in, unsigned samples);
+      std::atomic_bool dead;
 };
 
 struct Instrument
@@ -161,10 +193,35 @@ class Square : public Instrument
       Filter filter;
 };
 
+class Sawtooth : public Instrument
+{
+   public:
+      Sawtooth();
+      ~Sawtooth();
+
+      Sawtooth(Sawtooth&&);
+      Sawtooth& operator=(Sawtooth&&);
+
+      void render(float *out, unsigned frames) override;
+      void reset(unsigned channel, unsigned note, unsigned velocity) override;
+
+   private:
+      blipper_t *blip = nullptr;
+      Envelope env;
+
+      float delta;
+      unsigned period;
+
+      static std::vector<blipper_sample_t> filter_bank;
+      static void init_filter();
+
+      Filter filter;
+};
+
 class AirSynth : public Synthesizer
 {
    public:
-      AirSynth(const char *device, const char *path);
+      AirSynth(const char *wav_path);
       ~AirSynth();
 
       AirSynth(AirSynth&&) = delete;
@@ -172,27 +229,23 @@ class AirSynth : public Synthesizer
 
       void set_note(unsigned channel, unsigned note, unsigned velocity) override;
       void set_sustain(unsigned channel, bool enable) override;
+      void render(float *buffer, unsigned frames) override;
+      void set_format(unsigned sample_rate, unsigned max_frames, unsigned channels) override;
 
    private:
       std::vector<float> wav_buffer;
       SNDFILE *sndfile = nullptr;
-      std::unique_ptr<AudioDriver> audio;
-      std::thread mixer_thread;
-      void mixer_loop();
 
       PolyphaseBank filter_bank{64, 1 << 13};
 
       std::vector<std::unique_ptr<Instrument>> tones_noise;
       std::vector<std::unique_ptr<Instrument>> tones_square;
+      std::vector<std::unique_ptr<Instrument>> tones_saw;
 
       void render_synth(const std::vector<std::unique_ptr<Instrument>>& synth,
             float *mix_buffer, float *tmp_buffer, unsigned frames);
 
       std::vector<bool> sustain;
-      std::atomic<bool> dead;
-
-      static void float_to_s16(int16_t *out, const float *in, unsigned samples);
-      static void mixer_add(float *out, const float *in, unsigned samples);
 };
 
 #endif

@@ -24,7 +24,7 @@ class AudioDriver
 {
    public:
       virtual ~AudioDriver() = default;
-      virtual bool write(const std::int16_t *data, unsigned frames) = 0;
+      virtual bool write(const float *data, unsigned frames) = 0;
 };
 
 class ALSADriver : public AudioDriver
@@ -36,7 +36,7 @@ class ALSADriver : public AudioDriver
       ALSADriver(ALSADriver&&) = delete;
       void operator=(ALSADriver&&) = delete;
 
-      bool write(const std::int16_t *data, unsigned frames) override;
+      bool write(const float *data, unsigned frames) override;
 
    private:
       snd_pcm_t *pcm = nullptr;

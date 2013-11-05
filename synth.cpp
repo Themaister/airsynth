@@ -75,7 +75,7 @@ void AirSynth::set_format(unsigned sample_rate, unsigned max_frames, unsigned ch
 void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
 {
    //auto& tones = note > 60 ? tones_square : tones_noise;
-   auto& tones = tones_noise;
+   auto& tones = tones_saw;
 
    if (velocity == 0)
    {
@@ -288,35 +288,13 @@ AudioThreadLoop::~AudioThreadLoop()
 void AudioThreadLoop::mixer_loop()
 {
    float buffer[2 * 64];
-   int16_t ibuffer[2 * 64];
    synth->set_format(44100, 64, 2);
 
    while (!dead.load())
    {
       fill(begin(buffer), end(buffer), 0.0f);
       synth->render(buffer, 64);
-      float_to_s16(ibuffer, buffer, 2 * 64);
-      driver->write(ibuffer, 64);
-   }
-}
-
-void AudioThreadLoop::float_to_s16(int16_t *out, const float *in, unsigned samples)
-{
-   for (unsigned s = 0; s < samples; s++)
-   {
-      int32_t v = int32_t(round(in[s] * 0x7fff));
-      if (v > 0x7fff)
-      {
-         fprintf(stderr, "Clipping (+): %d.\n", v);
-         out[s] = 0x7fff;
-      }
-      else if (v < -0x8000)
-      {
-         fprintf(stderr, "Clipping (-): %d.\n", v);
-         out[s] = -0x8000;
-      }
-      else
-         out[s] = v;
+      driver->write(buffer, 64);
    }
 }
 

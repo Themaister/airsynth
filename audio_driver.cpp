@@ -43,14 +43,14 @@ bool ALSADriver::init(const char *device, unsigned rate, unsigned channels)
    snd_pcm_hw_params_t *params = NULL;
    snd_pcm_hw_params_alloca(&params);
 
-   unsigned latency_usec = 12000;
+   unsigned latency_usec = 8000;
    unsigned periods = 4;
 
    if (snd_pcm_hw_params_any(pcm, params) < 0)
       return false;
    if (snd_pcm_hw_params_set_access(pcm, params, SND_PCM_ACCESS_RW_INTERLEAVED) < 0)
       return false;
-   if (snd_pcm_hw_params_set_format(pcm, params, SND_PCM_FORMAT_S16) < 0)
+   if (snd_pcm_hw_params_set_format(pcm, params, SND_PCM_FORMAT_FLOAT) < 0)
       return false;
    if (snd_pcm_hw_params_set_channels(pcm, params, channels) < 0)
       return false;
@@ -67,7 +67,7 @@ bool ALSADriver::init(const char *device, unsigned rate, unsigned channels)
    return true;
 }
 
-bool ALSADriver::write(const int16_t *data, unsigned frames)
+bool ALSADriver::write(const float *data, unsigned frames)
 {
    const uint8_t *buffer = reinterpret_cast<const uint8_t*>(data);
 

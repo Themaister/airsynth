@@ -66,7 +66,6 @@ class AudioThreadLoop
 
       std::thread mixer_thread;
       void mixer_loop();
-      static void float_to_s16(int16_t *out, const float *in, unsigned samples);
       std::atomic_bool dead;
 };
 

@@ -58,15 +58,13 @@ AudioCallback::MidiEvent AudioCallback::get_event(MidiRawData midi_raw)
 
 void AudioDriver::run()
 {
-   unique_lock<mutex> unilock;
-   unilock.lock();
-   while (!dead)
-      cond.wait(unilock);
-   unilock.unlock();
+   unique_lock<mutex> unilock{lock};
+   cond.wait(unilock, [this] { return dead; });
 }
 
 void AudioDriver::kill()
 {
+   fprintf(stderr, "Killing ...\n");
    lock_guard<mutex> holder{lock};
    dead = true;
    cond.notify_all();

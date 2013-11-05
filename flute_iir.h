@@ -17,7 +17,7 @@
 
 #ifndef FLUTE_IIR_H__
 #define FLUTE_IIR_H__
-static const double flute_iir_filt_l[] = {
+static const float flute_iir_filt_l[] = {
    3.064637,
    -5.360351,
    7.596374,
@@ -319,7 +319,7 @@ static const double flute_iir_filt_l[] = {
    0.030631,
    -0.014210,
 };
-static const double flute_iir_filt_r[] = {
+static const float flute_iir_filt_r[] = {
    3.108065,
    -5.436081,
    7.688667,

@@ -60,10 +60,10 @@ struct Instrument
    Instrument() { active->store(false); }
    unsigned note = 0;
    unsigned channel = 0;
-   double time = 0;
-   double time_step = 1.0 / 44100.0;
-   double sample_rate = 44100.0;
-   double released_time = 0.0;
+   float time = 0;
+   float time_step = 1.0 / 44100.0;
+   float sample_rate = 44100.0;
+   float released_time = 0.0;
 
    bool sustained = false;
    bool released = false;
@@ -74,31 +74,29 @@ struct Instrument
    virtual unsigned render(float **out, unsigned frames, unsigned channels) = 0;
    virtual void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate);
 
-   bool check_release_complete(double release);
+   bool check_release_complete(float release);
 };
 
 struct Envelope
 {
-   double attack = 0.0;
-   double delay = 0.0;
-   double sustain_level = 0.0;
-   double release = 0.0;
-   double amp = 0.0;
-   double gain = 1.0;
+   float attack = 0.0;
+   float delay = 0.0;
+   float sustain_level = 0.0;
+   float release = 0.0;
+   float amp = 0.0;
+   float gain = 1.0;
 
-   double time_step = 1.0 / 44100.0;
+   float time_step = 1.0 / 44100.0;
 
-   double envelope(double time, bool released);
+   float envelope(float time, bool released);
 };
 
 struct PolyphaseBank
 {
    PolyphaseBank(unsigned taps, unsigned phases);
-   std::vector<double> buffer;
+   std::vector<float> buffer;
    unsigned taps;
    unsigned phases;
-
-   double sinc(double v) const;
 };
 
 class NoiseIIR : public Instrument
@@ -113,12 +111,12 @@ class NoiseIIR : public Instrument
    private:
       struct IIR
       {
-         const double *filter = nullptr;
-         std::vector<double> buffer;
+         const float *filter = nullptr;
+         std::vector<float> buffer;
          unsigned ptr = 0;
          unsigned len = 0;
-         double step(double v);
-         void set_filter(const double *filter, unsigned len);
+         float step(float v);
+         void set_filter(const float *filter, unsigned len);
          void reset();
       } iir_l, iir_r;
 
@@ -128,17 +126,17 @@ class NoiseIIR : public Instrument
       unsigned decimate_factor = 0;
       unsigned phase = 0;
 
-      std::vector<double> history_l;
-      std::vector<double> history_r;
+      std::vector<float> history_l;
+      std::vector<float> history_r;
       unsigned history_ptr = 0;
       unsigned history_len = 0;
 
-      double noise_step(IIR &iir);
+      float noise_step(IIR &iir);
 
       const PolyphaseBank *bank = nullptr;
 
       std::default_random_engine engine;
-      std::uniform_real_distribution<double> dist{-0.01, 0.01};
+      std::uniform_real_distribution<float> dist{-0.01, 0.01};
 };
 
 class Filter 
@@ -222,7 +220,7 @@ class AirSynth : public Synthesizer
       std::vector<float> wav_buffer;
       SNDFILE *sndfile = nullptr;
 
-      PolyphaseBank filter_bank{64, 1 << 13};
+      PolyphaseBank filter_bank{32, 1 << 13};
 
       std::vector<std::unique_ptr<Instrument>> tones_noise;
       std::vector<std::unique_ptr<Instrument>> tones_square;

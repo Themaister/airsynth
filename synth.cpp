@@ -67,18 +67,18 @@ void Synthesizer::process_midi(MidiEvent data)
    {
       case Event::NoteOn:
          set_note(data.channel, data.lo, data.hi);
-         fprintf(stderr, "[ON] #%u, Key: %03u, Vel: %03u.\n", data.channel, data.lo, data.hi);
+         //fprintf(stderr, "[ON] #%u, Key: %03u, Vel: %03u.\n", data.channel, data.lo, data.hi);
          break;
 
       case Event::NoteOff:
          set_note(data.channel, data.lo, 0);
-         fprintf(stderr, "[OFF] #%u, Key: %03u, Vel: %03u.\n", data.channel, data.lo, data.hi);
+         //fprintf(stderr, "[OFF] #%u, Key: %03u, Vel: %03u.\n", data.channel, data.lo, data.hi);
          break;
 
       case Event::Control:
          if (data.lo == 64) // Sustain controller on my CP33.
             set_sustain(data.channel, data.hi);
-         fprintf(stderr, "[CTRL] #%u, Control: %03u, Val: %03u.\n", data.channel, data.lo, data.hi);
+         //fprintf(stderr, "[CTRL] #%u, Control: %03u, Val: %03u.\n", data.channel, data.lo, data.hi);
          break;
 
       case Event::TimingClock:
@@ -86,14 +86,15 @@ void Synthesizer::process_midi(MidiEvent data)
          break;
 
       default:
-         fprintf(stderr, "[%u] #%u, Lo: %03u, Hi: %03u.\n", (unsigned)data.event, data.channel, data.lo, data.hi);
+         //fprintf(stderr, "[%u] #%u, Lo: %03u, Hi: %03u.\n", (unsigned)data.event, data.channel, data.lo, data.hi);
+         break;
    }
 }
 
 void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
 {
    //auto& tones = note > 60 ? tones_square : tones_noise;
-   auto& tones = tones_saw;
+   auto& tones = tones_noise;
 
    if (velocity == 0)
    {
@@ -120,12 +121,12 @@ void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
 
       if (itr == end(tones))
       {
-         fprintf(stderr, "Couldn't find any notes for note: %u, vel: %u.\n",
-               note, velocity);
+         //fprintf(stderr, "Couldn't find any notes for note: %u, vel: %u.\n",
+         //      note, velocity);
          return;
       }
 
-      fprintf(stderr, "Trigger note: %u.\n", note);
+      //fprintf(stderr, "Trigger note: %u.\n", note);
       (*itr)->reset(channel, note, velocity, sample_rate);
    }
 }
@@ -191,7 +192,7 @@ void Instrument::reset(unsigned channel, unsigned note, unsigned vel, unsigned s
    active->store(vel != 0);
 }
 
-bool Instrument::check_release_complete(double release)
+bool Instrument::check_release_complete(float release)
 {
    if (released && time >= released_time + release)
    {
@@ -242,18 +243,18 @@ void Filter::reset()
    buffer.resize(len);
 }
 
-double Envelope::envelope(double time, bool released)
+float Envelope::envelope(float time, bool released)
 {
    if (released)
    {
-      double release_factor = 8.0 * time_step / release;
+      float release_factor = 8.0 * time_step / release;
       amp -= amp * release_factor;
    }
    else if (time >= attack + delay)
       amp = sustain_level;
    else if (time >= attack)
    {
-      double lerp = (time - attack) / delay;
+      float lerp = (time - attack) / delay;
       amp = (1.0 - lerp) + sustain_level * lerp;
    }
    else
@@ -262,8 +263,42 @@ double Envelope::envelope(double time, bool released)
    return gain * amp;
 }
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
-double PolyphaseBank::sinc(double v) const
+static double besseli0(double x)
+{
+   double sum = 0.0;
+
+   double factorial = 1.0;
+   double factorial_mult = 0.0;
+   double x_pow = 1.0;
+   double two_div_pow = 1.0;
+   double x_sqr = x * x;
+
+   /* Approximate. This is an infinite sum.
+    * Luckily, it converges rather fast. */
+   for (unsigned i = 0; i < 18; i++)
+   {
+      sum += x_pow * two_div_pow / (factorial * factorial);
+
+      factorial_mult += 1.0;
+      x_pow *= x_sqr;
+      two_div_pow *= 0.25;
+      factorial *= factorial_mult;
+   }
+
+   return sum;
+}
+
+// index range = [-1, 1)
+static double kaiser_window(double index, double beta)
+{
+   return besseli0(beta * sqrt(1.0 - index * index));
+}
+
+static double sinc(double v)
 {
    if (fabs(v) < 0.0001)
       return 1.0;
@@ -276,12 +311,18 @@ PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases)
 {
    buffer.resize(taps * phases);
    std::vector<float> tmp(taps * phases);
+
    int elems = taps * phases;
+   double sidelobes = taps / 2.0;
+   double window_mod = 1.0 / kaiser_window(0.0, 7.0);
+
    for (int i = 0; i < elems; i++)
    {
-      double phase = M_PI * double(i - (elems >> 1)) / phases;
-      double window_phase = phase / taps;
-      tmp[i] = 0.75 * sinc(0.75 * phase) * cos(window_phase);
+      double window_phase = double(i) / elems;
+      window_phase = 2.0 * window_phase - 1.0;
+      double sinc_phase = window_phase * sidelobes;
+
+      tmp[i] = 0.75 * sinc(M_PI * 0.75 * sinc_phase) * kaiser_window(window_phase, 7.0) * window_mod;
    }
 
    for (unsigned t = 0; t < taps; t++)

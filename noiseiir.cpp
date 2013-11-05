@@ -49,21 +49,21 @@ unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
          phase -= interpolate_factor;
       }
 
-      const double *filter = bank->buffer.data() + phase * bank->taps;
+      const float *filter = bank->buffer.data() + phase * bank->taps;
 
-      const double *src_l = history_l.data() + history_ptr;
-      const double *src_r = history_r.data() + history_ptr;
+      const float *src_l = history_l.data() + history_ptr;
+      const float *src_r = history_r.data() + history_ptr;
 
-      double res[2] = {0.0, 0.0};
+      float res[2] = {0.0, 0.0};
       for (unsigned i = 0; i < history_len; i++)
       {
          res[0] += filter[i] * src_l[i];
          res[1] += filter[i] * src_r[i];
       }
 
-      double env_mod = env.envelope(time, released) * velocity;
+      float env_mod = env.envelope(time, released) * velocity;
       for (unsigned c = 0; c < channels; c++)
-         out[0][s] += env_mod * res[c & 1];
+         out[c][s] += env_mod * res[c & 1];
 
       time += time_step;
    }
@@ -71,10 +71,10 @@ unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
    return s;
 }
 
-double NoiseIIR::IIR::step(double v)
+float NoiseIIR::IIR::step(float v)
 {
-   double res = 0.0;
-   const double *src = buffer.data() + ptr;
+   float res = 0.0;
+   const float *src = buffer.data() + ptr;
    for (unsigned i = 0; i < len; i++)
       res += src[i] * filter[i];
    res += v;
@@ -84,7 +84,7 @@ double NoiseIIR::IIR::step(double v)
    return res;
 }
 
-void NoiseIIR::IIR::set_filter(const double *filter, unsigned len)
+void NoiseIIR::IIR::set_filter(const float *filter, unsigned len)
 {
    this->filter = filter;
    this->len = len;
@@ -93,7 +93,7 @@ void NoiseIIR::IIR::set_filter(const double *filter, unsigned len)
    ptr = 0;
 }
 
-double NoiseIIR::noise_step(IIR &iir)
+float NoiseIIR::noise_step(IIR &iir)
 {
    return iir.step(dist(engine));
 }

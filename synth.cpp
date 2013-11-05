@@ -61,15 +61,33 @@ AirSynth::~AirSynth()
    }
 }
 
-void AirSynth::set_format(unsigned sample_rate, unsigned max_frames, unsigned channels)
+void Synthesizer::process_midi(MidiEvent data)
 {
-   Synthesizer::set_format(sample_rate, max_frames, channels);
-   for (auto& tone : tones_noise)
-      tone->time_step = 1.0 / sample_rate;
-   for (auto& tone : tones_square)
-      tone->time_step = 1.0 / sample_rate;
-   for (auto& tone : tones_saw)
-      tone->time_step = 1.0 / sample_rate;
+   switch (data.event)
+   {
+      case Event::NoteOn:
+         set_note(data.channel, data.lo, data.hi);
+         fprintf(stderr, "[ON] #%u, Key: %03u, Vel: %03u.\n", data.channel, data.lo, data.hi);
+         break;
+
+      case Event::NoteOff:
+         set_note(data.channel, data.lo, 0);
+         fprintf(stderr, "[OFF] #%u, Key: %03u, Vel: %03u.\n", data.channel, data.lo, data.hi);
+         break;
+
+      case Event::Control:
+         if (data.lo == 64) // Sustain controller on my CP33.
+            set_sustain(data.channel, data.hi);
+         fprintf(stderr, "[CTRL] #%u, Control: %03u, Val: %03u.\n", data.channel, data.lo, data.hi);
+         break;
+
+      case Event::TimingClock:
+      case Event::ActiveSensing:
+         break;
+
+      default:
+         fprintf(stderr, "[%u] #%u, Lo: %03u, Hi: %03u.\n", (unsigned)data.event, data.channel, data.lo, data.hi);
+   }
 }
 
 void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
@@ -108,7 +126,7 @@ void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
       }
 
       fprintf(stderr, "Trigger note: %u.\n", note);
-      (*itr)->reset(channel, note, velocity);
+      (*itr)->reset(channel, note, velocity, sample_rate);
    }
 }
 
@@ -137,29 +155,27 @@ void AirSynth::set_sustain(unsigned channel, bool sustain)
 }
 
 void AirSynth::render_synth(const vector<unique_ptr<Instrument>>& synth,
-      float *mix_buffer, float *tmp_buffer, unsigned frames)
+      float **mix_buffer, unsigned frames)
 {
    for (auto &tone : synth)
    {
       if (!tone->active->load())
          continue;
-
-      tone->render(tmp_buffer, frames);
-      mixer_add(mix_buffer, tmp_buffer, 2 * frames);
+      tone->render(mix_buffer, frames, channels);
    }
 }
 
-void AirSynth::render(float *buffer, unsigned frames)
+void AirSynth::process_audio(float **buffer, unsigned frames)
 {
-   render_synth(tones_noise, buffer, mix_buffer.data(), frames);
-   render_synth(tones_square, buffer, mix_buffer.data(), frames);
-   render_synth(tones_saw, buffer, mix_buffer.data(), frames);
+   render_synth(tones_noise, buffer, frames);
+   render_synth(tones_square, buffer, frames);
+   render_synth(tones_saw, buffer, frames);
 
-   if (sndfile)
-      wav_buffer.insert(end(wav_buffer), buffer, buffer + channels * frames);
+   //if (sndfile)
+   //   wav_buffer.insert(end(wav_buffer), buffer, buffer + channels * frames);
 }
 
-void Instrument::reset(unsigned channel, unsigned note, unsigned vel)
+void Instrument::reset(unsigned channel, unsigned note, unsigned vel, unsigned sample_rate)
 {
    velocity = vel / 127.0f;
 
@@ -167,6 +183,9 @@ void Instrument::reset(unsigned channel, unsigned note, unsigned vel)
    sustained = false;
    this->note = note;
    this->channel = channel;
+
+   this->sample_rate = sample_rate;
+   time_step = 1.0 / sample_rate;
 
    time = 0.0;
    active->store(vel != 0);
@@ -268,39 +287,5 @@ PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases)
    for (unsigned t = 0; t < taps; t++)
       for (unsigned p = 0; p < phases; p++)
          buffer[p * taps + t] = tmp[t * phases + p];
-}
-
-AudioThreadLoop::AudioThreadLoop(std::shared_ptr<Synthesizer> synth,
-            std::shared_ptr<AudioDriver> driver)
-   : synth(move(synth)), driver(move(driver))
-{
-   dead.store(false);
-   mixer_thread = thread(&AudioThreadLoop::mixer_loop, this);
-}
-
-AudioThreadLoop::~AudioThreadLoop()
-{
-   dead.store(true);
-   if (mixer_thread.joinable())
-      mixer_thread.join();
-}
-
-void AudioThreadLoop::mixer_loop()
-{
-   float buffer[2 * 64];
-   synth->set_format(44100, 64, 2);
-
-   while (!dead.load())
-   {
-      fill(begin(buffer), end(buffer), 0.0f);
-      synth->render(buffer, 64);
-      driver->write(buffer, 64);
-   }
-}
-
-void Synthesizer::mixer_add(float *out, const float *in, unsigned samples)
-{
-   for (unsigned s = 0; s < samples; s++)
-      out[s] += in[s];
 }
 

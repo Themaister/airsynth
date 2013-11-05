@@ -5,7 +5,7 @@
 using namespace std;
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
+void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel, unsigned sample_rate)
 {
    history_l.clear();
    history_r.clear();
@@ -14,7 +14,8 @@ void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
    history_ptr = 0;
 
    float offset = note - (69.0f + 7.0f);
-   decimate_factor = unsigned(round(interpolate_factor * pow(2.0f, offset / 12.0f)));
+   decimate_factor = unsigned(round((44100.0 / sample_rate) *
+            interpolate_factor * pow(2.0f, offset / 12.0f)));
    phase = 0;
 
    env.attack = 0.635 - vel / 220.0;
@@ -23,7 +24,7 @@ void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel)
    env.release = 1.2;
    env.gain = 0.05 * exp(0.025 * (69.0 - note));
 
-   Instrument::reset(channel, note, vel);
+   Instrument::reset(channel, note, vel, sample_rate);
 }
 
 NoiseIIR::NoiseIIR()
@@ -32,7 +33,7 @@ NoiseIIR::NoiseIIR()
    iir_r.set_filter(flute_iir_filt_r, ARRAY_SIZE(flute_iir_filt_r));
 }
 
-void NoiseIIR::render(float *out, unsigned frames)
+unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
 {
    unsigned s;
    for (s = 0; s < frames; s++, phase += decimate_factor)
@@ -53,21 +54,21 @@ void NoiseIIR::render(float *out, unsigned frames)
       const double *src_l = history_l.data() + history_ptr;
       const double *src_r = history_r.data() + history_ptr;
 
-      double res_l = 0.0;
-      double res_r = 0.0;
+      double res[2] = {0.0, 0.0};
       for (unsigned i = 0; i < history_len; i++)
       {
-         res_l += filter[i] * src_l[i];
-         res_r += filter[i] * src_r[i];
+         res[0] += filter[i] * src_l[i];
+         res[1] += filter[i] * src_r[i];
       }
 
       double env_mod = env.envelope(time, released) * velocity;
-      out[(s << 1) + 0] = env_mod * res_l;
-      out[(s << 1) + 1] = env_mod * res_r;
+      for (unsigned c = 0; c < channels; c++)
+         out[0][s] += env_mod * res[c & 1];
+
       time += time_step;
    }
 
-   fill(out + (s << 1), out + (frames << 1), 0.0f);
+   return s;
 }
 
 double NoiseIIR::IIR::step(double v)

@@ -40,11 +40,11 @@ void Square::init_filter()
    free(filt);
 }
 
-void Square::reset(unsigned channel, unsigned note, unsigned velocity)
+void Square::reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate)
 {
    double freq = 440.0 * pow(2.0f, (note - 69.0) / 12.0);
 
-   period = unsigned(round(44100.0 * 64 / (2.0 * freq))); 
+   period = unsigned(round(sample_rate * 64 / (2.0 * freq))); 
 
    delta = 0.5f;
    blipper_reset(blip);
@@ -55,10 +55,10 @@ void Square::reset(unsigned channel, unsigned note, unsigned velocity)
    env.sustain_level = 0.05;
    env.release = 0.2;
 
-   Instrument::reset(channel, note, velocity);
+   Instrument::reset(channel, note, velocity, sample_rate);
 }
 
-void Square::render(float *out, unsigned frames)
+unsigned Square::render(float **out, unsigned frames, unsigned channels)
 {
    while (blipper_read_avail(blip) < frames)
    {
@@ -74,13 +74,14 @@ void Square::render(float *out, unsigned frames)
 
       blipper_sample_t val = 0;
       blipper_read(blip, &val, 1, 1);
-      //fprintf(stderr, "Val: %d.\n", val);
-      out[(s << 1) + 0] = out[(s << 1) + 1] = filter.process(val) * env.envelope(time, released) * velocity;
+      float res = filter.process(val) * env.envelope(time, released) * velocity;
+      for (unsigned c = 0; c < channels; c++)
+         out[c][s] += res;
 
       time += time_step;
    }
 
-   fill(out + (s << 1), out + (frames << 1), 0.0f);
+   return s;
 }
 
 

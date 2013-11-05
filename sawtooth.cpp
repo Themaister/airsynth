@@ -41,11 +41,11 @@ void Sawtooth::init_filter()
    free(filt);
 }
 
-void Sawtooth::reset(unsigned channel, unsigned note, unsigned velocity)
+void Sawtooth::reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate)
 {
    double freq = 440.0 * pow(2.0f, (note - 69.0) / 12.0);
 
-   period = unsigned(round(44100.0 * 64 / freq)); 
+   period = unsigned(round(sample_rate * 64 / freq)); 
 
    delta = -0.2f;
    blipper_reset(blip);
@@ -58,10 +58,10 @@ void Sawtooth::reset(unsigned channel, unsigned note, unsigned velocity)
    env.sustain_level = 0.15;
    env.release = 0.05;
 
-   Instrument::reset(channel, note, velocity);
+   Instrument::reset(channel, note, velocity, sample_rate);
 }
 
-void Sawtooth::render(float *out, unsigned frames)
+unsigned Sawtooth::render(float **out, unsigned frames, unsigned channels)
 {
    while (blipper_read_avail(blip) < frames)
       blipper_push_delta(blip, delta, period);
@@ -74,11 +74,13 @@ void Sawtooth::render(float *out, unsigned frames)
 
       blipper_sample_t val = 0;
       blipper_read(blip, &val, 1, 1);
-      out[(s << 1) + 0] = out[(s << 1) + 1] = filter.process(val) * env.envelope(time, released) * velocity;
+      float res = filter.process(val) * env.envelope(time, released) * velocity;
+      for (unsigned c = 0; c < channels; c++)
+         out[c][s] += res;
 
       time += time_step;
    }
 
-   fill(out + (s << 1), out + (frames << 1), 0.0f);
+   return s;
 }
 

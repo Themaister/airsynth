@@ -5,9 +5,9 @@ CSOURCES := $(wildcard *.c)
 OBJECTS := $(SOURCES:.cpp=.o) $(CSOURCES:.c=.o)
 HEADERS := $(wildcard *.hpp)
 
-CXXFLAGS += -Wall -pedantic -std=gnu++11 -pedantic $(shell pkg-config alsa sndfile --cflags) -DBLIPPER_FIXED_POINT=0
+CXXFLAGS += -Wall -pedantic -std=gnu++11 -pedantic $(shell pkg-config jack sndfile --cflags) -DBLIPPER_FIXED_POINT=0
 CFLAGS += -ansi -pedantic -Wall -DBLIPPER_FIXED_POINT=0
-LDFLAGS += $(shell pkg-config alsa sndfile --libs) -lm
+LDFLAGS += $(shell pkg-config jack sndfile --libs) -lm
 
 ifeq ($(DEBUG), 1)
    CFLAGS += -O0 -g

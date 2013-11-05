@@ -30,19 +30,21 @@
 
 #include "blipper.h"
 
-class Synthesizer
+class Synthesizer : public AudioCallback
 {
    public:
-      virtual void set_format(unsigned sample_rate, unsigned max_frames, unsigned channels)
+      void configure_audio(unsigned sample_rate, unsigned max_frames, unsigned channels) override
       {
-         mix_buffer.resize(max_frames * channels);
+         mix_buffer.resize(max_frames);
          this->channels = channels;
          this->sample_rate = sample_rate;
       }
 
-      virtual void render(float *buffer, unsigned frames) = 0;
-      virtual void set_note(unsigned, unsigned note, unsigned velocity) = 0;
-      virtual void set_sustain(unsigned, bool enable) = 0;
+      void process_midi(MidiEvent event) override;
+
+      virtual void set_note(unsigned channel, unsigned note, unsigned velocity) = 0;
+      virtual void set_sustain(unsigned channel, bool enable) = 0;
+
       virtual ~Synthesizer() = default;
 
    protected:
@@ -53,22 +55,6 @@ class Synthesizer
       static void mixer_add(float *out, const float *in, unsigned samples);
 };
 
-class AudioThreadLoop
-{
-   public:
-      AudioThreadLoop(std::shared_ptr<Synthesizer> synth,
-            std::shared_ptr<AudioDriver> driver);
-      ~AudioThreadLoop();
-
-   private:
-      std::shared_ptr<Synthesizer> synth;
-      std::shared_ptr<AudioDriver> driver;
-
-      std::thread mixer_thread;
-      void mixer_loop();
-      std::atomic_bool dead;
-};
-
 struct Instrument
 {
    Instrument() { active->store(false); }
@@ -76,6 +62,7 @@ struct Instrument
    unsigned channel = 0;
    double time = 0;
    double time_step = 1.0 / 44100.0;
+   double sample_rate = 44100.0;
    double released_time = 0.0;
 
    bool sustained = false;
@@ -84,8 +71,8 @@ struct Instrument
    std::unique_ptr<std::mutex> lock{new std::mutex};
    std::unique_ptr<std::atomic_bool> active{new std::atomic_bool};
 
-   virtual void render(float *out, unsigned frames) = 0;
-   virtual void reset(unsigned channel, unsigned note, unsigned velocity);
+   virtual unsigned render(float **out, unsigned frames, unsigned channels) = 0;
+   virtual void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate);
 
    bool check_release_complete(double release);
 };
@@ -119,8 +106,8 @@ class NoiseIIR : public Instrument
    public:
       NoiseIIR();
 
-      void render(float *out, unsigned frames) override;
-      void reset(unsigned channel, unsigned note, unsigned velocity) override;
+      unsigned render(float **out, unsigned frames, unsigned channels) override;
+      void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate) override;
       void set_filter_bank(const PolyphaseBank *bank);
 
    private:
@@ -176,8 +163,8 @@ class Square : public Instrument
       Square(Square&&);
       Square& operator=(Square&&);
 
-      void render(float *out, unsigned frames) override;
-      void reset(unsigned channel, unsigned note, unsigned velocity) override;
+      unsigned render(float **out, unsigned frames, unsigned channels) override;
+      void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate) override;
 
    private:
       blipper_t *blip = nullptr;
@@ -201,8 +188,8 @@ class Sawtooth : public Instrument
       Sawtooth(Sawtooth&&);
       Sawtooth& operator=(Sawtooth&&);
 
-      void render(float *out, unsigned frames) override;
-      void reset(unsigned channel, unsigned note, unsigned velocity) override;
+      unsigned render(float **out, unsigned frames, unsigned channels) override;
+      void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate) override;
 
    private:
       blipper_t *blip = nullptr;
@@ -228,8 +215,8 @@ class AirSynth : public Synthesizer
 
       void set_note(unsigned channel, unsigned note, unsigned velocity) override;
       void set_sustain(unsigned channel, bool enable) override;
-      void render(float *buffer, unsigned frames) override;
-      void set_format(unsigned sample_rate, unsigned max_frames, unsigned channels) override;
+
+      void process_audio(float **buffer, unsigned frames) override;
 
    private:
       std::vector<float> wav_buffer;
@@ -242,7 +229,7 @@ class AirSynth : public Synthesizer
       std::vector<std::unique_ptr<Instrument>> tones_saw;
 
       void render_synth(const std::vector<std::unique_ptr<Instrument>>& synth,
-            float *mix_buffer, float *tmp_buffer, unsigned frames);
+            float **mix_buffer, unsigned frames);
 
       std::vector<bool> sustain;
 };

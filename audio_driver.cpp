@@ -15,81 +15,60 @@
 
 
 #include "audio_driver.hpp"
-#include <stdexcept>
 
 using namespace std;
 
-ALSADriver::ALSADriver(const char *device, unsigned rate, unsigned channels)
+void AudioCallback::process_midi(MidiRawData midi_raw)
 {
-   if (!init(device, rate, channels))
+   process_midi(get_event(midi_raw));
+}
+
+AudioCallback::MidiEvent AudioCallback::get_event(MidiRawData midi_raw)
+{
+   Event e = Event::None;
+   uint8_t event = midi_raw[0];
+   unsigned channel = 0;
+   uint8_t type = event >> 4;
+
+   if (type >= 0x8 && type <= 0xe)
    {
-      if (pcm)
-         snd_pcm_close(pcm);
-      throw runtime_error("Failed to open ALSA device.\n");
+      channel = event & 0xf;
+      e = static_cast<Event>(type & 0x7);
    }
-}
-
-ALSADriver::~ALSADriver()
-{
-   snd_pcm_drain(pcm);
-   snd_pcm_close(pcm);
-}
-
-bool ALSADriver::init(const char *device, unsigned rate, unsigned channels)
-{
-   if (snd_pcm_open(&pcm, device ? device : "default", SND_PCM_STREAM_PLAYBACK, 0) < 0)
-      return false;
-
-   snd_pcm_hw_params_t *params = NULL;
-   snd_pcm_hw_params_alloca(&params);
-
-   unsigned latency_usec = 8000;
-   unsigned periods = 4;
-
-   if (snd_pcm_hw_params_any(pcm, params) < 0)
-      return false;
-   if (snd_pcm_hw_params_set_access(pcm, params, SND_PCM_ACCESS_RW_INTERLEAVED) < 0)
-      return false;
-   if (snd_pcm_hw_params_set_format(pcm, params, SND_PCM_FORMAT_FLOAT) < 0)
-      return false;
-   if (snd_pcm_hw_params_set_channels(pcm, params, channels) < 0)
-      return false;
-   if (snd_pcm_hw_params_set_rate(pcm, params, rate, 0) < 0)
-      return false;
-   if (snd_pcm_hw_params_set_buffer_time_near(pcm, params, &latency_usec, nullptr) < 0)
-      return false;
-   if (snd_pcm_hw_params_set_periods_near(pcm, params, &periods, nullptr) < 0)
-      return false;
-
-   if (snd_pcm_hw_params(pcm, params) < 0)
-      return false;
-
-   return true;
-}
-
-bool ALSADriver::write(const float *data, unsigned frames)
-{
-   const uint8_t *buffer = reinterpret_cast<const uint8_t*>(data);
-
-   while (frames)
+   else if (type == 0xf)
    {
-      auto ret = snd_pcm_writei(pcm, buffer, frames);
-      if (ret == -EPIPE || ret == -EINTR || ret == -ESTRPIPE)
+      type = event & 0xf;
+      switch (type)
       {
-         if (ret == -EPIPE)
-            fprintf(stderr, "[ALSA]: Underrun.\n");
-         if (snd_pcm_recover(pcm, ret, 1) < 0)
-            return false;
-      }
-      else if (ret < 0)
-         return false;
-      else
-      {
-         frames -= ret;
-         buffer += snd_pcm_frames_to_bytes(pcm, ret);
+         case  1: e = Event::TimeCodeQuarter; break;
+         case  2: e = Event::SongPosition; break;
+         case  3: e = Event::SongSelect; break;
+         case  6: e = Event::TuneRequest; break;
+         case  8: e = Event::TimingClock; break;
+         case 10: e = Event::Start; break;
+         case 11: e = Event::Continue; break;
+         case 12: e = Event::Stop; break;
+         case 14: e = Event::ActiveSensing; break;
+         case 15: e = Event::Reset; break;
       }
    }
 
-   return true;
+   return {e, channel, midi_raw[1], midi_raw[2]};
+}
+
+void AudioDriver::run()
+{
+   unique_lock<mutex> unilock;
+   unilock.lock();
+   while (!dead)
+      cond.wait(unilock);
+   unilock.unlock();
+}
+
+void AudioDriver::kill()
+{
+   lock_guard<mutex> holder{lock};
+   dead = true;
+   cond.notify_all();
 }
 

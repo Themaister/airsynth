@@ -143,6 +143,30 @@ struct Voice
       std::unique_ptr<std::atomic_bool> m_active{new std::atomic_bool(false)};
 };
 
+class Instrument
+{
+   public:
+      Instrument() { sustain.resize(16); }
+      template<typename T, typename... P>
+      inline void init(unsigned num_voices, const P&... p)
+      {
+         voices.clear();
+         for (unsigned i = 0; i < num_voices; i++)
+            voices.push_back(std::unique_ptr<Voice>(new T(p...)));
+      }
+
+      void render(float **buffer, unsigned frames, unsigned channels);
+      void set_note(unsigned channel, unsigned note,
+            unsigned velocity, unsigned sample_rate);
+      void set_sustain(unsigned channel, bool sustain);
+
+      void reset();
+
+   private:
+      std::vector<std::unique_ptr<Voice>> voices;
+      std::vector<bool> sustain;
+};
+
 struct PolyphaseBank
 {
    PolyphaseBank(unsigned taps, unsigned phases);
@@ -154,11 +178,10 @@ struct PolyphaseBank
 class NoiseIIR : public Voice 
 {
    public:
-      NoiseIIR();
+      NoiseIIR(const PolyphaseBank *bank);
 
       unsigned render(float **out, unsigned frames, unsigned channels) override;
       void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate) override;
-      void set_filter_bank(const PolyphaseBank *bank);
 
    private:
       struct IIR
@@ -253,8 +276,7 @@ class Sawtooth : public Voice
 class AirSynth : public Synthesizer
 {
    public:
-      AirSynth(const char *wav_path);
-      ~AirSynth();
+      AirSynth();
 
       AirSynth(AirSynth&&) = delete;
       void operator=(AirSynth&&) = delete;
@@ -265,19 +287,8 @@ class AirSynth : public Synthesizer
       void process_audio(float **buffer, unsigned frames) override;
 
    private:
-      std::vector<float> wav_buffer;
-      SNDFILE *sndfile = nullptr;
-
       PolyphaseBank filter_bank{32, 1 << 13};
-
-      std::vector<std::unique_ptr<Voice>> tones_noise;
-      std::vector<std::unique_ptr<Voice>> tones_square;
-      std::vector<std::unique_ptr<Voice>> tones_saw;
-
-      void render_synth(const std::vector<std::unique_ptr<Voice>>& synth,
-            float **mix_buffer, unsigned frames);
-
-      std::vector<bool> sustain;
+      std::shared_ptr<Instrument> instrument;
 };
 
 #endif

@@ -46,6 +46,7 @@ static int process_cb(jack_nframes_t nframes, void *data)
 
 bool JACKDriver::init(unsigned channels)
 {
+   fprintf(stderr, "Initializing JACK ...\n");
    client = jack_client_open("AirSynth", JackNullOption, nullptr);
    if (!client)
    {
@@ -76,7 +77,10 @@ bool JACKDriver::init(unsigned channels)
       return false;
 
    max_frames = jack_get_buffer_size(client);
-   audio_cb->configure_audio(jack_get_sample_rate(client), max_frames, channels);
+   fprintf(stderr, "Got JACK buffer size: %u frames.\n", unsigned(max_frames));
+   unsigned sample_rate = jack_get_sample_rate(client);
+   fprintf(stderr, "Got JACK sample rate: %u Hz.\n", sample_rate);
+   audio_cb->configure_audio(sample_rate, max_frames, channels);
 
    if (jack_activate(client) < 0)
       return false;

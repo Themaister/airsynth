@@ -44,15 +44,13 @@ static void print_help(void)
    fprintf(stderr, "Usage: airsynth [-o/--output <wav file>] [-h/--help]\n");
 }
 
-static string dump_wav;
 static void parse_cmdline(int argc, char *argv[])
 {
    const struct option opts[] = {
-      { "output", 1, NULL, 'o' },
       { "help", 0, NULL, 'h' },
    };
 
-   const char *optstring = "o:h";
+   const char *optstring = "h";
    for (;;)
    {
       int c = getopt_long(argc, argv, optstring, opts, NULL);
@@ -61,10 +59,6 @@ static void parse_cmdline(int argc, char *argv[])
 
       switch (c)
       {
-         case 'o':
-            dump_wav = optarg;
-            break;
-
          case 'h':
             print_help();
             exit(EXIT_SUCCESS);
@@ -102,7 +96,7 @@ int main(int argc, char *argv[])
 
    try
    {
-      shared_ptr<Synthesizer> synth = make_shared<AirSynth>(dump_wav.c_str());
+      shared_ptr<Synthesizer> synth = make_shared<AirSynth>();
       auto audio_driver = make_shared<JACKDriver>(synth, 2);
 
       register_signals([&audio_driver] {

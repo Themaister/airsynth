@@ -20,45 +20,10 @@
 
 using namespace std;
 
-AirSynth::AirSynth(const char *path)
+AirSynth::AirSynth()
 {
-   tones_noise.resize(32);
-   for (auto& tone : tones_noise)
-   {
-      tone = unique_ptr<NoiseIIR>(new NoiseIIR);
-      static_cast<NoiseIIR*>(tone.get())->set_filter_bank(&filter_bank);
-   }
-
-   tones_square.resize(256);
-   for (auto& tone : tones_square)
-      tone = unique_ptr<Square>(new Square);
-
-   tones_saw.resize(256);
-   for (auto& tone : tones_saw)
-      tone = unique_ptr<Sawtooth>(new Sawtooth);
-
-   sustain.resize(16);
-
-   if (path)
-   {
-      SF_INFO info = {0};
-      info.samplerate = 44100;
-      info.channels = 2;
-      info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
-      sndfile = sf_open(path, SFM_WRITE, &info);
-   }
-
-   if (sndfile)
-      wav_buffer.reserve(256 * 1024 * 1024); // Keep it simple for now. Should be a threaded dump loop.
-}
-
-AirSynth::~AirSynth()
-{
-   if (sndfile)
-   {
-      sf_writef_float(sndfile, wav_buffer.data(), wav_buffer.size() / 2);
-      sf_close(sndfile);
-   }
+   instrument = make_shared<Instrument>();
+   instrument->init<NoiseIIR>(32, &filter_bank);
 }
 
 void Synthesizer::process_midi(MidiEvent data)
@@ -93,51 +58,54 @@ void Synthesizer::process_midi(MidiEvent data)
 
 void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
 {
-   //auto& tones = note > 60 ? tones_square : tones_noise;
-   auto& tones = tones_noise;
+   if (instrument)
+      instrument->set_note(channel, note, velocity, sample_rate);
+}
 
+void AirSynth::set_sustain(unsigned channel, bool sustain)
+{
+   if (instrument)
+      instrument->set_sustain(channel, sustain);
+}
+
+void AirSynth::process_audio(float **buffer, unsigned frames)
+{
+   if (instrument)
+      instrument->render(buffer, frames, channels);
+}
+
+void Instrument::set_note(unsigned channel, unsigned note,
+      unsigned velocity, unsigned sample_rate)
+{
    if (velocity == 0)
    {
-      for (auto &tone : tones)
+      for (auto &tone : voices)
          tone->release_note(channel, note, sustain[channel]);
    }
    else
    {
-      auto itr = find_if(begin(tones), end(tones),
+      auto itr = find_if(begin(voices), end(voices),
             [](const unique_ptr<Voice> &t) { return !t->active(); });
 
-      if (itr == end(tones))
-      {
-         //fprintf(stderr, "Couldn't find any notes for note: %u, vel: %u.\n",
-         //      note, velocity);
+      if (itr == end(voices))
          return;
-      }
-
-      //fprintf(stderr, "Trigger note: %u.\n", note);
       (*itr)->reset(channel, note, velocity, sample_rate);
    }
 }
 
-void AirSynth::set_sustain(unsigned channel, bool sustain)
+void Instrument::set_sustain(unsigned channel, bool sustain)
 {
    this->sustain[channel] = sustain;
    if (sustain)
       return;
 
-   auto release = [channel](vector<unique_ptr<Voice>>& tones) {
-      for (auto &tone : tones)
-         tone->release_sustain(channel);
-   };
-
-   release(tones_noise);
-   release(tones_square);
-   release(tones_saw);
+   for (auto &tone : voices)
+      tone->release_sustain(channel);
 }
 
-void AirSynth::render_synth(const vector<unique_ptr<Voice>>& synth,
-      float **mix_buffer, unsigned frames)
+void Instrument::render(float **mix_buffer, unsigned frames, unsigned channels)
 {
-   for (auto &tone : synth)
+   for (auto &tone : voices)
    {
       if (!tone->active())
          continue;
@@ -145,14 +113,11 @@ void AirSynth::render_synth(const vector<unique_ptr<Voice>>& synth,
    }
 }
 
-void AirSynth::process_audio(float **buffer, unsigned frames)
+void Instrument::reset()
 {
-   render_synth(tones_noise, buffer, frames);
-   render_synth(tones_square, buffer, frames);
-   render_synth(tones_saw, buffer, frames);
-
-   //if (sndfile)
-   //   wav_buffer.insert(end(wav_buffer), buffer, buffer + channels * frames);
+   fill(begin(sustain), end(sustain), false);
+   for (auto &tone : voices)
+      tone->active(false);
 }
 
 void Voice::reset(unsigned channel, unsigned note, unsigned vel, unsigned sample_rate)

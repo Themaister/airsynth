@@ -29,10 +29,19 @@ void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel, unsigned sam
    Voice::reset(channel, note, vel, sample_rate);
 }
 
-NoiseIIR::NoiseIIR()
+NoiseIIR::NoiseIIR(const PolyphaseBank *bank)
 {
    iir_l.set_filter(flute_iir_filt_l, ARRAY_SIZE(flute_iir_filt_l));
    iir_r.set_filter(flute_iir_filt_r, ARRAY_SIZE(flute_iir_filt_r));
+
+   this->bank = bank;
+   interpolate_factor = bank->phases;
+   history_len = bank->taps;
+
+   history_l.clear();
+   history_l.resize(2 * history_len);
+   history_r.clear();
+   history_r.resize(2 * history_len);
 }
 
 unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
@@ -100,17 +109,5 @@ void NoiseIIR::IIR::set_filter(const float *filter, unsigned len)
 float NoiseIIR::noise_step(IIR &iir)
 {
    return iir.step(dist(engine));
-}
-
-void NoiseIIR::set_filter_bank(const PolyphaseBank *bank)
-{
-   this->bank = bank;
-   interpolate_factor = bank->phases;
-   history_len = bank->taps;
-
-   history_l.clear();
-   history_l.resize(2 * history_len);
-   history_r.clear();
-   history_r.resize(2 * history_len);
 }
 

@@ -18,13 +18,15 @@ void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel, unsigned sam
             interpolate_factor * pow(2.0f, offset / 12.0f)));
    phase = 0;
 
-   env.attack = 0.635 - vel / 220.0;
-   env.delay = 0.865 - vel / 220.0;
-   env.sustain_level = 0.45;
-   env.release = 1.2;
-   env.gain = 0.05 * exp(0.025 * (69.0 - note));
+   set_envelope(
+         0.05 * exp(0.025 * (69.0 - note)),
+         0.635 - vel / 220.0,
+         0.865 - vel / 220.0,
+         0.45,
+         1.2
+   );
 
-   Instrument::reset(channel, note, vel, sample_rate);
+   Voice::reset(channel, note, vel, sample_rate);
 }
 
 NoiseIIR::NoiseIIR()
@@ -35,10 +37,12 @@ NoiseIIR::NoiseIIR()
 
 unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
 {
+   lock_guard<Voice> holder{*this};
+
    unsigned s;
    for (s = 0; s < frames; s++, phase += decimate_factor)
    {
-      if (check_release_complete(env.release))
+      if (check_release_complete())
          break;
 
       while (phase >= interpolate_factor)
@@ -61,11 +65,11 @@ unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
          res[1] += filter[i] * src_r[i];
       }
 
-      float env_mod = env.envelope(time, released) * velocity;
+      float env_mod = envelope_amp();
       for (unsigned c = 0; c < channels; c++)
          out[c][s] += env_mod * res[c & 1];
 
-      time += time_step;
+      step();
    }
 
    return s;

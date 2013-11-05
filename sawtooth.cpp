@@ -21,7 +21,6 @@ Sawtooth& Sawtooth::operator=(Sawtooth&& saw)
 {
    blipper_free(blip);
    blip = saw.blip;
-   env = saw.env;
    delta = saw.delta;
    period = saw.period;
    filter = move(saw.filter);
@@ -53,32 +52,30 @@ void Sawtooth::reset(unsigned channel, unsigned note, unsigned velocity, unsigne
 
    blipper_set_ramp(blip, 0.2f, period);
 
-   env.attack = 0.05;
-   env.delay = 0.05;
-   env.sustain_level = 0.15;
-   env.release = 0.05;
-
-   Instrument::reset(channel, note, velocity, sample_rate);
+   set_envelope(1.0, 0.05, 0.05, 0.15, 0.05);
+   Voice::reset(channel, note, velocity, sample_rate);
 }
 
 unsigned Sawtooth::render(float **out, unsigned frames, unsigned channels)
 {
+   lock_guard<Voice> holder{*this};
+
    while (blipper_read_avail(blip) < frames)
       blipper_push_delta(blip, delta, period);
 
    unsigned s;
    for (s = 0; s < frames; s++)
    {
-      if (check_release_complete(env.release))
+      if (check_release_complete())
          break;
 
       blipper_sample_t val = 0;
       blipper_read(blip, &val, 1, 1);
-      float res = filter.process(val) * env.envelope(time, released) * velocity;
+      float res = filter.process(val) * envelope_amp();
       for (unsigned c = 0; c < channels; c++)
          out[c][s] += res;
 
-      time += time_step;
+      step();
    }
 
    return s;

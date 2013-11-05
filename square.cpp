@@ -20,7 +20,6 @@ Square& Square::operator=(Square&& square)
 {
    blipper_free(blip);
    blip = square.blip;
-   env = square.env;
    delta = square.delta;
    period = square.period;
    filter = move(square.filter);
@@ -50,16 +49,14 @@ void Square::reset(unsigned channel, unsigned note, unsigned velocity, unsigned 
    blipper_reset(blip);
    blipper_push_delta(blip, -0.25f, 0);
 
-   env.attack = 0.10;
-   env.delay = 0.10;
-   env.sustain_level = 0.05;
-   env.release = 0.2;
-
-   Instrument::reset(channel, note, velocity, sample_rate);
+   set_envelope(1.0, 0.10, 0.10, 0.05, 0.2);
+   Voice::reset(channel, note, velocity, sample_rate);
 }
 
 unsigned Square::render(float **out, unsigned frames, unsigned channels)
 {
+   lock_guard<Voice> holder{*this};
+
    while (blipper_read_avail(blip) < frames)
    {
       blipper_push_delta(blip, delta, period);
@@ -69,16 +66,16 @@ unsigned Square::render(float **out, unsigned frames, unsigned channels)
    unsigned s;
    for (s = 0; s < frames; s++)
    {
-      if (check_release_complete(env.release))
+      if (check_release_complete())
          break;
 
       blipper_sample_t val = 0;
       blipper_read(blip, &val, 1, 1);
-      float res = filter.process(val) * env.envelope(time, released) * velocity;
+      float res = filter.process(val) * envelope_amp();
       for (unsigned c = 0; c < channels; c++)
          out[c][s] += res;
 
-      time += time_step;
+      step();
    }
 
    return s;

@@ -55,28 +55,6 @@ class Synthesizer : public AudioCallback
       static void mixer_add(float *out, const float *in, unsigned samples);
 };
 
-struct Instrument
-{
-   Instrument() { active->store(false); }
-   unsigned note = 0;
-   unsigned channel = 0;
-   float time = 0;
-   float time_step = 1.0 / 44100.0;
-   float sample_rate = 44100.0;
-   float released_time = 0.0;
-
-   bool sustained = false;
-   bool released = false;
-   float velocity = 0.0f;
-   std::unique_ptr<std::mutex> lock{new std::mutex};
-   std::unique_ptr<std::atomic_bool> active{new std::atomic_bool};
-
-   virtual unsigned render(float **out, unsigned frames, unsigned channels) = 0;
-   virtual void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate);
-
-   bool check_release_complete(float release);
-};
-
 struct Envelope
 {
    float attack = 0.0;
@@ -91,6 +69,80 @@ struct Envelope
    float envelope(float time, bool released);
 };
 
+struct Voice
+{
+   public:
+      virtual unsigned render(float **out, unsigned frames, unsigned channels) = 0;
+      virtual void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate);
+
+      inline bool active() const { return m_active->load(); }
+      inline void active(bool val) { m_active->store(val); }
+
+      bool check_release_complete();
+
+      inline void lock() { m_lock->lock(); }
+      inline void unlock() { m_lock->unlock(); }
+
+      inline float velocity() const { return m_velocity; }
+      inline void step() { time += time_step; }
+
+      inline void set_envelope(float gain, float attack, float delay, float sustain_level,
+            float release)
+      {
+         env.gain = gain;
+         env.attack = attack;
+         env.delay = delay;
+         env.sustain_level = sustain_level;
+         env.release = release;
+      }
+
+      inline float envelope_amp() { return velocity() * env.envelope(time, released); }
+
+      inline void release_sustain(unsigned channel)
+      {
+         if (active() && sustained && this->channel == channel)
+         {
+            std::lock_guard<std::mutex> lock{*m_lock};
+            released = true;
+            released_time = time;
+            sustained = false;
+         }
+      }
+
+      inline void release_note(unsigned channel, unsigned note, bool sustained)
+      {
+         if (active() && this->note == note && this->channel == channel &&
+            !this->sustained && !released)
+         {
+            std::lock_guard<std::mutex> holder{*m_lock};
+            if (sustained)
+               this->sustained = true;
+            else
+            {
+               released = true;
+               released_time = time;
+            }
+         }
+      }
+
+   private:
+      Envelope env;
+
+      unsigned note = 0;
+      unsigned channel = 0;
+      float time = 0;
+      float time_step = 1.0 / 44100.0;
+      float sample_rate = 44100.0;
+      float released_time = 0.0;
+
+      bool sustained = false;
+      bool released = false;
+      float m_velocity = 0.0f;
+
+      std::unique_ptr<std::mutex> m_lock{new std::mutex};
+      std::unique_ptr<std::atomic_bool> m_active{new std::atomic_bool(false)};
+};
+
 struct PolyphaseBank
 {
    PolyphaseBank(unsigned taps, unsigned phases);
@@ -99,7 +151,7 @@ struct PolyphaseBank
    unsigned phases;
 };
 
-class NoiseIIR : public Instrument
+class NoiseIIR : public Voice 
 {
    public:
       NoiseIIR();
@@ -119,8 +171,6 @@ class NoiseIIR : public Instrument
          void set_filter(const float *filter, unsigned len);
          void reset();
       } iir_l, iir_r;
-
-      Envelope env;
 
       unsigned interpolate_factor = 0;
       unsigned decimate_factor = 0;
@@ -152,7 +202,7 @@ class Filter
       std::deque<float> buffer;
 };
 
-class Square : public Instrument
+class Square : public Voice 
 {
    public:
       Square();
@@ -166,7 +216,6 @@ class Square : public Instrument
 
    private:
       blipper_t *blip = nullptr;
-      Envelope env;
 
       float delta;
       unsigned period;
@@ -177,7 +226,7 @@ class Square : public Instrument
       Filter filter;
 };
 
-class Sawtooth : public Instrument
+class Sawtooth : public Voice 
 {
    public:
       Sawtooth();
@@ -191,7 +240,6 @@ class Sawtooth : public Instrument
 
    private:
       blipper_t *blip = nullptr;
-      Envelope env;
 
       float delta;
       unsigned period;
@@ -222,11 +270,11 @@ class AirSynth : public Synthesizer
 
       PolyphaseBank filter_bank{32, 1 << 13};
 
-      std::vector<std::unique_ptr<Instrument>> tones_noise;
-      std::vector<std::unique_ptr<Instrument>> tones_square;
-      std::vector<std::unique_ptr<Instrument>> tones_saw;
+      std::vector<std::unique_ptr<Voice>> tones_noise;
+      std::vector<std::unique_ptr<Voice>> tones_square;
+      std::vector<std::unique_ptr<Voice>> tones_saw;
 
-      void render_synth(const std::vector<std::unique_ptr<Instrument>>& synth,
+      void render_synth(const std::vector<std::unique_ptr<Voice>>& synth,
             float **mix_buffer, unsigned frames);
 
       std::vector<bool> sustain;

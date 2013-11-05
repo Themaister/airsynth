@@ -99,25 +99,12 @@ void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
    if (velocity == 0)
    {
       for (auto &tone : tones)
-      {
-         if (tone->active->load() && tone->note == note &&
-               !tone->released && !tone->sustained && tone->channel == channel)
-         {
-            lock_guard<mutex> lock{*tone->lock};
-            if (sustain[channel])
-               tone->sustained = true;
-            else
-            {
-               tone->released = true;
-               tone->released_time = tone->time;
-            }
-         }
-      }
+         tone->release_note(channel, note, sustain[channel]);
    }
    else
    {
       auto itr = find_if(begin(tones), end(tones),
-            [](const unique_ptr<Instrument> &t) { return !t->active->load(); });
+            [](const unique_ptr<Voice> &t) { return !t->active(); });
 
       if (itr == end(tones))
       {
@@ -137,17 +124,9 @@ void AirSynth::set_sustain(unsigned channel, bool sustain)
    if (sustain)
       return;
 
-   auto release = [channel](vector<unique_ptr<Instrument>>& tones) {
+   auto release = [channel](vector<unique_ptr<Voice>>& tones) {
       for (auto &tone : tones)
-      {
-         if (tone->active->load() && tone->sustained && tone->channel == channel)
-         {
-            lock_guard<mutex> lock{*tone->lock};
-            tone->released = true;
-            tone->released_time = tone->time;
-            tone->sustained = false;
-         }
-      }
+         tone->release_sustain(channel);
    };
 
    release(tones_noise);
@@ -155,12 +134,12 @@ void AirSynth::set_sustain(unsigned channel, bool sustain)
    release(tones_saw);
 }
 
-void AirSynth::render_synth(const vector<unique_ptr<Instrument>>& synth,
+void AirSynth::render_synth(const vector<unique_ptr<Voice>>& synth,
       float **mix_buffer, unsigned frames)
 {
    for (auto &tone : synth)
    {
-      if (!tone->active->load())
+      if (!tone->active())
          continue;
       tone->render(mix_buffer, frames, channels);
    }
@@ -176,9 +155,9 @@ void AirSynth::process_audio(float **buffer, unsigned frames)
    //   wav_buffer.insert(end(wav_buffer), buffer, buffer + channels * frames);
 }
 
-void Instrument::reset(unsigned channel, unsigned note, unsigned vel, unsigned sample_rate)
+void Voice::reset(unsigned channel, unsigned note, unsigned vel, unsigned sample_rate)
 {
-   velocity = vel / 127.0f;
+   m_velocity = vel / 127.0f;
 
    released = false;
    sustained = false;
@@ -187,18 +166,19 @@ void Instrument::reset(unsigned channel, unsigned note, unsigned vel, unsigned s
 
    this->sample_rate = sample_rate;
    time_step = 1.0 / sample_rate;
+   env.time_step = time_step;
 
    time = 0.0;
-   active->store(vel != 0);
+   active(vel != 0);
 }
 
-bool Instrument::check_release_complete(float release)
+bool Voice::check_release_complete()
 {
-   if (released && time >= released_time + release)
+   if (released && time >= released_time + env.release)
    {
       sustained = false;
       released = false;
-      active->store(false);
+      m_active->store(false);
       return true;
    }
    else

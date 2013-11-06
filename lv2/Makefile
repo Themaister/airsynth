@@ -20,7 +20,7 @@ $(BUNDLE): manifest.ttl airsynth.ttl airsynth.so
 	mkdir $(BUNDLE)
 	install -m644 manifest.ttl airsynth.ttl airsynth.so $(BUNDLE)
 
-%.peg: %.ttl
+airsynth.peg: airsynth.ttl
 	lv2peg $< $@
 
 airsynth.so: $(OBJECTS)

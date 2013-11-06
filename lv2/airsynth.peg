@@ -1,0 +1,35 @@
+#ifndef airsynth_peg
+#define airsynth_peg
+
+
+#ifndef PEG_STRUCT
+#define PEG_STRUCT
+typedef struct {
+  float min;
+  float max;
+  float default_value;
+  char toggled;
+  char integer;
+  char logarithmic;
+} peg_data_t;
+#endif
+
+/* <git://github.com/Themaister/airsynth.git> */
+
+static const char peg_uri[] = "git://github.com/Themaister/airsynth.git";
+
+enum peg_port_enum {
+  peg_output_left,
+  peg_output_right,
+  peg_midi,
+  peg_n_ports
+};
+
+static const peg_data_t peg_ports[] = {
+  { -3.40282e+38, 3.40282e+38, -3.40282e+38, 0, 0, 0 }, 
+  { -3.40282e+38, 3.40282e+38, -3.40282e+38, 0, 0, 0 }, 
+  { -3.40282e+38, 3.40282e+38, -3.40282e+38, 0, 0, 0 }, 
+};
+
+
+#endif /* airsynth_peg */

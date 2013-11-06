@@ -17,12 +17,19 @@ class AirSynthVoice : public LV2::Voice
          if (key == LV2::INVALID_KEY)
             noise.active(false);
          else
-            noise.reset(0, key, velocity, false);
+            noise.reset(0, key, velocity, m_rate);
       }
 
       void off(unsigned char velocity)
       {
-         noise.release_note(0, m_key, false);
+         noise.release_note(0, m_key, m_sustained);
+      }
+
+      void sustain(bool enable)
+      {
+         m_sustained = true;
+         if (!m_sustained)
+            noise.release_sustain(0);
       }
 
       unsigned char get_key() const { return m_key; }
@@ -41,6 +48,7 @@ class AirSynthVoice : public LV2::Voice
    private:
       unsigned char m_key;
       unsigned m_rate;
+      bool m_sustained = false;
       NoiseIIR noise;
 };
 
@@ -53,6 +61,35 @@ class AirSynthLV2 : public LV2::Synth<AirSynthVoice, AirSynthLV2>
          for (unsigned i = 0; i < 32; i++)
             add_voices(new AirSynthVoice(rate));
          add_audio_outputs(peg_output_left, peg_output_right);
+      }
+
+      void handle_midi(uint32_t size, unsigned char *data)
+      {
+         if (size != 3)
+            return;
+
+         if ((data[0] & 0xf0) == 0x90)
+         {
+            for (auto &voice : m_voices)
+            {
+               if (voice->get_key() == LV2::INVALID_KEY)
+               {
+                  voice->on(data[1], data[2]);
+                  break;
+               }
+            }
+         }
+         else if ((data[0] & 0xf0) == 0x80)
+         {
+            for (auto &voice : m_voices)
+               if (voice->get_key() == data[1])
+                  voice->off(data[2]);
+         }
+         else if ((data[0] & 0xf0) == 0xb0 && data[1] == 64) // Sustain on my CP33
+         {
+            for (auto &voice : m_voices)
+               voice->sustain(data[2]);
+         }
       }
 };
 

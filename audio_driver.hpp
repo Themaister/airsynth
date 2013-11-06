@@ -67,7 +67,7 @@ class AudioCallback
       };
 
       virtual void process_audio(float **audio, unsigned frames) = 0;
-      virtual void configure_audio(unsigned sample_rate, unsigned max_frames, unsigned channels) = 0;
+      virtual void configure_audio(unsigned sample_rate, unsigned channels) = 0;
 
       virtual void process_midi(MidiEvent data) = 0;
       void process_midi(MidiRawData midi_raw);
@@ -114,7 +114,6 @@ class JACKDriver : public AudioDriver
       std::vector<jack_port_t*> audio_ports;
       jack_port_t *midi_port = nullptr;
       std::vector<float*> target_ptrs;
-      jack_nframes_t max_frames = 0;
 };
 
 

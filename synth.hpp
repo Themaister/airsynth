@@ -33,9 +33,8 @@
 class Synthesizer : public AudioCallback
 {
    public:
-      void configure_audio(unsigned sample_rate, unsigned max_frames, unsigned channels) override
+      void configure_audio(unsigned sample_rate, unsigned channels) override
       {
-         mix_buffer.resize(max_frames);
          this->channels = channels;
          this->sample_rate = sample_rate;
       }
@@ -48,8 +47,7 @@ class Synthesizer : public AudioCallback
       virtual ~Synthesizer() = default;
 
    protected:
-      std::vector<float> mix_buffer;
-      unsigned channels = 1;
+      unsigned channels = 2;
       unsigned sample_rate = 44100;
 
       static void mixer_add(float *out, const float *in, unsigned samples);

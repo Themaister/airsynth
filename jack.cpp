@@ -76,11 +76,11 @@ bool JACKDriver::init(unsigned channels)
    if (!midi_port)
       return false;
 
-   max_frames = jack_get_buffer_size(client);
+   auto max_frames = jack_get_buffer_size(client);
    fprintf(stderr, "Got JACK buffer size: %u frames.\n", unsigned(max_frames));
    unsigned sample_rate = jack_get_sample_rate(client);
    fprintf(stderr, "Got JACK sample rate: %u Hz.\n", sample_rate);
-   audio_cb->configure_audio(sample_rate, max_frames, channels);
+   audio_cb->configure_audio(sample_rate, channels);
 
    if (jack_activate(client) < 0)
       return false;
@@ -90,13 +90,6 @@ bool JACKDriver::init(unsigned channels)
 
 int JACKDriver::process(jack_nframes_t frames)
 {
-   if (frames > max_frames)
-   {
-      audio_cb->configure_audio(jack_get_sample_rate(client),
-            frames, target_ptrs.size());
-      max_frames = frames;
-   }
-
    void *midi = jack_port_get_buffer(midi_port, frames);
    auto events = jack_midi_get_event_count(midi);
    for (unsigned i = 0; i < events; i++)

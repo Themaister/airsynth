@@ -18,14 +18,6 @@ void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel, unsigned sam
             interpolate_factor * pow(2.0f, offset / 12.0f)));
    phase = 0;
 
-   set_envelope(
-         0.05 * exp(0.025 * (69.0 - note)),
-         0.635 - vel / 220.0,
-         0.865 - vel / 220.0,
-         0.45,
-         1.2
-   );
-
    Voice::reset(channel, note, vel, sample_rate);
 }
 

@@ -49,7 +49,6 @@ void Square::reset(unsigned channel, unsigned note, unsigned velocity, unsigned 
    blipper_reset(blip);
    blipper_push_delta(blip, -0.25f, 0);
 
-   set_envelope(1.0, 0.10, 0.10, 0.05, 0.2);
    Voice::reset(channel, note, velocity, sample_rate);
 }
 

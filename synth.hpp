@@ -55,10 +55,10 @@ class Synthesizer : public AudioCallback
 
 struct Envelope
 {
-   float attack = 0.0;
-   float delay = 0.0;
-   float sustain_level = 0.0;
-   float release = 0.0;
+   float attack = 0.1;
+   float delay = 0.1;
+   float sustain_level = 0.25;
+   float release = 0.5;
    float amp = 0.0;
    float gain = 1.0;
 

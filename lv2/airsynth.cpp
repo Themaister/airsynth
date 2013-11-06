@@ -1,6 +1,7 @@
 #include <lv2synth.hpp>
 #include "../synth.hpp"
 #include "airsynth.peg"
+#include <cmath>
 
 static PolyphaseBank filter_bank{32, 1 << 13};
 
@@ -17,7 +18,14 @@ class AirSynthVoice : public LV2::Voice
          if (key == LV2::INVALID_KEY)
             noise.active(false);
          else
+         {
+            noise.set_envelope(
+               0.05 * std::exp(0.025 * (69.0 - key)),
+               0.05, 0.05, 0.45, 0.8
+            );
+
             noise.reset(0, key, velocity, m_rate);
+         }
       }
 
       void off(unsigned char velocity)

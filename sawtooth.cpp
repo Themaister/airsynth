@@ -51,8 +51,6 @@ void Sawtooth::reset(unsigned channel, unsigned note, unsigned velocity, unsigne
    blipper_push_delta(blip, -0.1f, 0);
 
    blipper_set_ramp(blip, 0.2f, period);
-
-   set_envelope(1.0, 0.05, 0.05, 0.15, 0.05);
    Voice::reset(channel, note, velocity, sample_rate);
 }
 

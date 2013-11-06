@@ -1,16 +1,20 @@
 BUNDLE := airsynth.lv2
 INSTALL_DIR = /usr/lib/lv2
 
-SOURCE := airsynth.cpp ../synth.cpp ../noiseiir.cpp
-OBJECTS := $(SOURCE:.cpp=.o)
+SOURCE := airsynth.cpp ../synth.cpp ../noiseiir.cpp ../sawtooth.cpp ../square.cpp
+CSOURCE := ../blipper.c
+OBJECTS := $(SOURCE:.cpp=.o) $(CSOURCE:.c=.o)
 
-LDFLAGS += -fPIC $(shell pkg-config lv2-plugin --libs) -shared
+LDFLAGS += -fPIC $(shell pkg-config lv2-plugin --libs) -shared -Wl,-no-undefined
 CXXFLAGS += -fPIC $(shell pkg-config lv2-plugin --cflags) -std=gnu++11 -Wall -pedantic
+CFLAGS += -fPIC -ansi -Wall -pedantic
 
 ifeq ($(DEBUG), 1)
    CXXFLAGS += -O0 -g
+   CFLAGS += -O0 -g
 else
    CXXFLAGS += -O2 -ffast-math -march=native
+   CFLAGS += -O2 -ffast-math -march=native
 endif
 
 all: $(BUNDLE)
@@ -28,6 +32,9 @@ airsynth.so: $(OBJECTS)
 
 %.o: %.cpp airsynth.peg
 	$(CXX) -c -o $@ $< $(CXXFLAGS)
+
+%.o: %.c
+	$(CC) -c -o $@ $< $(CFLAGS)
 
 install:
 	cp -r $(BUNDLE) $(INSTALL_DIR)

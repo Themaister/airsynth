@@ -10,7 +10,7 @@ CXXFLAGS += -fPIC $(shell pkg-config lv2-plugin --cflags) -std=gnu++11 -Wall -pe
 ifeq ($(DEBUG), 1)
    CXXFLAGS += -O0 -g
 else
-   CXXFLAGS += -O2
+   CXXFLAGS += -O2 -ffast-math -march=native
 endif
 
 all: $(BUNDLE)

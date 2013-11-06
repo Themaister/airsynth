@@ -27,7 +27,7 @@ class AirSynthVoice : public LV2::Voice
 
       void sustain(bool enable)
       {
-         m_sustained = true;
+         m_sustained = enable;
          if (!m_sustained)
             noise.release_sustain(0);
       }

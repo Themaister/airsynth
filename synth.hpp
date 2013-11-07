@@ -194,6 +194,7 @@ struct PolyphaseBank
 class NoiseIIR : public Voice 
 {
    public:
+      NoiseIIR();
       NoiseIIR(const PolyphaseBank *bank);
 
       unsigned render(float **out, unsigned frames, unsigned channels) override;
@@ -222,10 +223,10 @@ class NoiseIIR : public Voice
 
       float noise_step(IIR &iir);
 
-      const PolyphaseBank *bank = nullptr;
-
+      const PolyphaseBank *bank;
       std::default_random_engine engine;
       std::uniform_real_distribution<float> dist{-0.001, 0.001};
+      static PolyphaseBank static_bank;
 };
 
 class Filter 

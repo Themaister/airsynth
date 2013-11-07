@@ -1,45 +1,44 @@
 #include <lv2synth.hpp>
 #include "../synth.hpp"
-#include "airsynth.peg"
+#include "noise.peg"
 #include <cmath>
 
-//static PolyphaseBank filter_bank;
 using namespace std;
 
+template<typename VoiceType>
 class AirSynthVoice : public LV2::Voice
 {
    public:
       AirSynthVoice(double rate)
          : m_key(LV2::INVALID_KEY), m_rate(rate)
-           //, noise(&filter_bank)
       {}
 
       void on(unsigned char key, unsigned char velocity)
       {
          m_key = key;
          if (key == LV2::INVALID_KEY)
-            noise.active(false);
+            m_voice.active(false);
          else
          {
-            noise.set_envelope(
+            m_voice.set_envelope(
                pow(10.0f, *p(peg_gain) / 20.0f) * exp(*p(peg_rolloff) * (69.0f - key)),
                *p(peg_attack), *p(peg_delay), *p(peg_sustain), *p(peg_release)
             );
 
-            noise.trigger(key, velocity, m_rate);
+            m_voice.trigger(key, velocity, m_rate);
          }
       }
 
       void off(unsigned char velocity)
       {
-         noise.release(m_sustained);
+         m_voice.release(m_sustained);
       }
 
       void sustain(bool enable)
       {
          m_sustained = enable;
          if (!m_sustained)
-            noise.release_sustain();
+            m_voice.release_sustain();
       }
 
       unsigned char get_key() const { return m_key; }
@@ -50,8 +49,8 @@ class AirSynthVoice : public LV2::Voice
             return;
 
          float *buf[2] = { p(peg_output_left) + from, p(peg_output_right) + from };
-         noise.render(buf, to - from, 2);
-         if (!noise.active())
+         m_voice.render(buf, to - from, 2);
+         if (!m_voice.active())
             m_key = LV2::INVALID_KEY;
       }
 
@@ -59,19 +58,23 @@ class AirSynthVoice : public LV2::Voice
       unsigned char m_key;
       unsigned m_rate;
       bool m_sustained = false;
-      //NoiseIIR noise;
-      Sawtooth noise;
+      VoiceType m_voice;
 };
 
-class AirSynthLV2 : public LV2::Synth<AirSynthVoice, AirSynthLV2>
+using AirSynthNoiseIIR = AirSynthVoice<NoiseIIR>;
+using AirSynthSquare = AirSynthVoice<Sawtooth>;
+using AirSynthSawtooth = AirSynthVoice<Square>;
+
+template<typename VoiceType>
+class AirSynthLV2 : public LV2::Synth<VoiceType, AirSynthLV2<VoiceType>>
 {
    public:
       AirSynthLV2(double rate)
-         : LV2::Synth<AirSynthVoice, AirSynthLV2>(peg_n_ports, peg_midi)
+         : LV2::Synth<VoiceType, AirSynthLV2<VoiceType>>(peg_n_ports, peg_midi)
       {
          for (unsigned i = 0; i < 24; i++)
-            add_voices(new AirSynthVoice(rate));
-         add_audio_outputs(peg_output_left, peg_output_right);
+            this->add_voices(new VoiceType(rate));
+         this->add_audio_outputs(peg_output_left, peg_output_right);
       }
 
       void handle_midi(uint32_t size, unsigned char *data)
@@ -81,7 +84,7 @@ class AirSynthLV2 : public LV2::Synth<AirSynthVoice, AirSynthLV2>
 
          if ((data[0] & 0xf0) == 0x90)
          {
-            for (auto &voice : m_voices)
+            for (auto &voice : this->m_voices)
             {
                if (voice->get_key() == LV2::INVALID_KEY)
                {
@@ -92,17 +95,19 @@ class AirSynthLV2 : public LV2::Synth<AirSynthVoice, AirSynthLV2>
          }
          else if ((data[0] & 0xf0) == 0x80)
          {
-            for (auto &voice : m_voices)
+            for (auto &voice : this->m_voices)
                if (voice->get_key() == data[1])
                   voice->off(data[2]);
          }
          else if ((data[0] & 0xf0) == 0xb0 && data[1] == 64) // Sustain on my CP33
          {
-            for (auto &voice : m_voices)
+            for (auto &voice : this->m_voices)
                voice->sustain(data[2]);
          }
       }
 };
 
-int airsynth_register_key = AirSynthLV2::register_class(peg_uri);
+int airsynth_register_noiseiir = AirSynthLV2<AirSynthNoiseIIR>::register_class("git://github.com/Themaister/airsynth/noise");
+int airsynth_register_sawtooth = AirSynthLV2<AirSynthSawtooth>::register_class("git://github.com/Themaister/airsynth/saw");
+int airsynth_register_square = AirSynthLV2<AirSynthSquare>::register_class("git://github.com/Themaister/airsynth/square");
 

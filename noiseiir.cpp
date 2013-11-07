@@ -4,6 +4,8 @@
 
 using namespace std;
 
+PolyphaseBank NoiseIIR::static_bank;
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 void NoiseIIR::trigger(unsigned note, unsigned vel, unsigned sample_rate)
 {
@@ -35,6 +37,10 @@ NoiseIIR::NoiseIIR(const PolyphaseBank *bank)
    history_r.clear();
    history_r.resize(2 * history_len);
 }
+
+NoiseIIR::NoiseIIR()
+   : NoiseIIR(&static_bank)
+{}
 
 unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
 {

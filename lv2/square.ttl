@@ -4,14 +4,16 @@
 @prefix ll: <http://ll-plugins.nongnu.org/lv2/namespace#>.
 @prefix ev: <http://lv2plug.in/ns/ext/event#>.
 
-<git://github.com/Themaister/airsynth.git/out> a pg:StereoGroup.
+<git://github.com/Themaister/airsynth/square/out> a pg:StereoGroup.
 
-<git://github.com/Themaister/airsynth.git>
+<git://github.com/Themaister/airsynth/square>
   a lv2:Plugin, lv2:InstrumentPlugin;
   lv2:binary <airsynth.so>;
-  doap:name "AirSynth";
+  doap:name "AirSynth Square";
+  doap:homepage <https://github.com/Themaister/airsynth>;
   doap:license <http://usefulinc.com/doap/licenses/gpl>;
-  ll:pegName "peg";
+  doap:shortdesc "Bandlimited Square generator";
+  doap:creator "Hans-Kristian Arntzen";
 
   lv2:port [
     a lv2:AudioPort, lv2:OutputPort;
@@ -19,7 +21,7 @@
     lv2:symbol "output_left";
     lv2:name "Left Output";
     pg:membership [
-      pg:group <git://github.com/Themaister/airsynth.git/out>;
+      pg:group <git://github.com/Themaister/airsynth/square/out>;
       pg:role pg:leftChannel;
     ];
   ],
@@ -30,8 +32,8 @@
     lv2:symbol "output_right";
     lv2:name "Right Output";
     pg:membership [
-      pg:group <git://github.com/Themaister/airsynth.git/out>;
-      pg:role pg:leftChannel;
+      pg:group <git://github.com/Themaister/airsynth/square/out>;
+      pg:role pg:rightChannel;
     ];
   ],
 

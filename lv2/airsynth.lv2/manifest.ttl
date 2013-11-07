@@ -1,5 +1,11 @@
 @prefix lv2:  <http://lv2plug.in/ns/lv2core#>.
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
-<git://github.com/Themaister/airsynth.git>
+<git://github.com/Themaister/airsynth/noise>
   a lv2:Plugin;
-  rdfs:seeAlso <airsynth.ttl>.
+  rdfs:seeAlso <noise.ttl>.
+<git://github.com/Themaister/airsynth/saw>
+  a lv2:Plugin;
+  rdfs:seeAlso <saw.ttl>.
+<git://github.com/Themaister/airsynth/square>
+  a lv2:Plugin;
+  rdfs:seeAlso <square.ttl>.

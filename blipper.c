@@ -160,7 +160,7 @@ void blipper_set_ramp(blipper_t *blip, blipper_long_sample_t delta,
 {
    blipper_real_t ramp = BLIPPER_FILTER_AMP * delta * blip->phases / clocks;
 #if BLIPPER_FIXED_POINT
-   blip->ramp = (blipper_long_sample_t)round(ramp * 0x8000);
+   blip->ramp = (blipper_long_sample_t)floor(ramp * 0x8000 + 0.5);
 #else
    blip->ramp = ramp;
 #endif

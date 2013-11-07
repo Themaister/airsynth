@@ -6,8 +6,8 @@ CSOURCE := ../blipper.c
 OBJECTS := $(SOURCE:.cpp=.o) $(CSOURCE:.c=.o)
 
 LDFLAGS += -fPIC $(shell pkg-config lv2-plugin --libs) -shared -Wl,-no-undefined
-CXXFLAGS += -fPIC $(shell pkg-config lv2-plugin --cflags) -std=gnu++11 -Wall -pedantic
-CFLAGS += -fPIC -ansi -Wall -pedantic
+CXXFLAGS += -fPIC $(shell pkg-config lv2-plugin --cflags) -std=gnu++11 -Wall -pedantic -DBLIPPER_FIXED_POINT=0
+CFLAGS += -fPIC -ansi -Wall -pedantic -DBLIPPER_FIXED_POINT=0
 
 ifeq ($(DEBUG), 1)
    CXXFLAGS += -O0 -g

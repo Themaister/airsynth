@@ -1,3 +1,5 @@
 *.o
 *.so
+*.peg
+/lv2/airsynth.lv2
 /airsynth

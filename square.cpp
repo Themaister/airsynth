@@ -4,7 +4,7 @@ using namespace std;
 
 std::vector<blipper_sample_t> Square::filter_bank;
 Square::Square()
-   : filter({0.0168f, 2.0f * 0.0168f, 0.0168f}, {1.0f, -1.601092, 0.66836f})
+   : filter({}, {})
 {
    if (filter_bank.empty())
       init_filter();

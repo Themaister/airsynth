@@ -9,7 +9,8 @@ class AirSynthVoice : public LV2::Voice
 {
    public:
       AirSynthVoice(double rate)
-         : m_key(LV2::INVALID_KEY), m_rate(rate), noise(&filter_bank)
+         : m_key(LV2::INVALID_KEY), m_rate(rate)
+           //, noise(&filter_bank)
       {}
 
       void on(unsigned char key, unsigned char velocity)
@@ -20,7 +21,8 @@ class AirSynthVoice : public LV2::Voice
          else
          {
             noise.set_envelope(
-               0.05 * std::exp(0.025 * (69.0 - key)),
+               //0.5 * std::exp(0.025 * (69.0 - key)),
+               1.0,
                0.05, 0.05, 0.45, 0.8
             );
 
@@ -57,7 +59,8 @@ class AirSynthVoice : public LV2::Voice
       unsigned char m_key;
       unsigned m_rate;
       bool m_sustained = false;
-      NoiseIIR noise;
+      //NoiseIIR noise;
+      Sawtooth noise;
 };
 
 class AirSynthLV2 : public LV2::Synth<AirSynthVoice, AirSynthLV2>

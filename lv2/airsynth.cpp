@@ -62,8 +62,8 @@ class AirSynthVoice : public LV2::Voice
 };
 
 using AirSynthNoiseIIR = AirSynthVoice<NoiseIIR>;
-using AirSynthSquare = AirSynthVoice<Sawtooth>;
-using AirSynthSawtooth = AirSynthVoice<Square>;
+using AirSynthSquare = AirSynthVoice<Square>;
+using AirSynthSawtooth = AirSynthVoice<Sawtooth>;
 
 template<typename VoiceType>
 class AirSynthLV2 : public LV2::Synth<VoiceType, AirSynthLV2<VoiceType>>

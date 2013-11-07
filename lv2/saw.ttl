@@ -9,7 +9,7 @@
 <git://github.com/Themaister/airsynth/saw>
   a lv2:Plugin, lv2:InstrumentPlugin;
   lv2:binary <airsynth.so>;
-  doap:name "AirSynth Noise";
+  doap:name "AirSynth Saw";
   doap:homepage <https://github.com/Themaister/airsynth>;
   doap:license <http://usefulinc.com/doap/licenses/gpl>;
   doap:shortdesc "Bandlimited Sawtooth generator";

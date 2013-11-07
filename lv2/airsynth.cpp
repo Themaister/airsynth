@@ -3,7 +3,8 @@
 #include "airsynth.peg"
 #include <cmath>
 
-static PolyphaseBank filter_bank;
+//static PolyphaseBank filter_bank;
+using namespace std;
 
 class AirSynthVoice : public LV2::Voice
 {
@@ -21,9 +22,8 @@ class AirSynthVoice : public LV2::Voice
          else
          {
             noise.set_envelope(
-               //0.5 * std::exp(0.025 * (69.0 - key)),
-               1.0,
-               0.05, 0.05, 0.45, 0.8
+               pow(10.0f, *p(peg_gain) / 20.0f) * exp(*p(peg_rolloff) * (69.0f - key)),
+               *p(peg_attack), *p(peg_delay), *p(peg_sustain), *p(peg_release)
             );
 
             noise.trigger(key, velocity, m_rate);

@@ -22,6 +22,12 @@ enum peg_port_enum {
   peg_output_left,
   peg_output_right,
   peg_midi,
+  peg_gain,
+  peg_attack,
+  peg_delay,
+  peg_sustain,
+  peg_release,
+  peg_rolloff,
   peg_n_ports
 };
 
@@ -29,6 +35,12 @@ static const peg_data_t peg_ports[] = {
   { -3.40282e+38, 3.40282e+38, -3.40282e+38, 0, 0, 0 }, 
   { -3.40282e+38, 3.40282e+38, -3.40282e+38, 0, 0, 0 }, 
   { -3.40282e+38, 3.40282e+38, -3.40282e+38, 0, 0, 0 }, 
+  { -80, 12, 0, 0, 0, 0 }, 
+  { 0.005, 2, 0.05, 0, 0, 0 }, 
+  { 0.005, 2, 0.05, 0, 0, 0 }, 
+  { 0, 1, 0.45, 0, 0, 0 }, 
+  { 0.005, 5, 0.8, 0, 0, 0 }, 
+  { 0, 0.1, 0, 0, 0, 0 }, 
 };
 
 

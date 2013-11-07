@@ -3,6 +3,13 @@
 @prefix pg: <http://ll-plugins.nongnu.org/lv2/ext/portgroup#>.
 @prefix ll: <http://ll-plugins.nongnu.org/lv2/namespace#>.
 @prefix ev: <http://lv2plug.in/ns/ext/event#>.
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+
+<git://github.com/Themaister#me>
+  a foaf:Person;
+  foaf:name "Hans-Kristian Arntzen";
+  foaf:mbox <mailto:maister@archlinux.us>;
+  foaf:homepage <http://themaister.net/>.
 
 <git://github.com/Themaister/airsynth/square/out> a pg:StereoGroup.
 
@@ -10,10 +17,9 @@
   a lv2:Plugin, lv2:InstrumentPlugin;
   lv2:binary <airsynth.so>;
   doap:name "AirSynth Square";
-  doap:homepage <https://github.com/Themaister/airsynth>;
   doap:license <http://usefulinc.com/doap/licenses/gpl>;
   doap:shortdesc "Bandlimited Square generator";
-  doap:creator "Hans-Kristian Arntzen";
+  doap:maintainer <git://github.com/Themaister#me>;
 
   lv2:port [
     a lv2:AudioPort, lv2:OutputPort;

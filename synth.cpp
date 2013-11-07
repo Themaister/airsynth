@@ -20,10 +20,11 @@
 
 using namespace std;
 
+static PolyphaseBank filter_bank;
+
 AirSynth::AirSynth()
 {
-   instrument = make_shared<Instrument>();
-   instrument->init<NoiseIIR>(32, &filter_bank);
+   instrument.init<NoiseIIR>(32, &filter_bank);
 }
 
 void Synthesizer::process_midi(MidiEvent data)
@@ -31,103 +32,88 @@ void Synthesizer::process_midi(MidiEvent data)
    switch (data.event)
    {
       case Event::NoteOn:
-         set_note(data.channel, data.lo, data.hi);
-         //fprintf(stderr, "[ON] #%u, Key: %03u, Vel: %03u.\n", data.channel, data.lo, data.hi);
+         set_note(data.lo, data.hi);
          break;
 
       case Event::NoteOff:
-         set_note(data.channel, data.lo, 0);
-         //fprintf(stderr, "[OFF] #%u, Key: %03u, Vel: %03u.\n", data.channel, data.lo, data.hi);
+         set_note(data.lo, 0);
          break;
 
       case Event::Control:
          if (data.lo == 64) // Sustain controller on my CP33.
-            set_sustain(data.channel, data.hi);
-         //fprintf(stderr, "[CTRL] #%u, Control: %03u, Val: %03u.\n", data.channel, data.lo, data.hi);
-         break;
-
-      case Event::TimingClock:
-      case Event::ActiveSensing:
+            set_sustain(data.hi);
          break;
 
       default:
-         //fprintf(stderr, "[%u] #%u, Lo: %03u, Hi: %03u.\n", (unsigned)data.event, data.channel, data.lo, data.hi);
          break;
    }
 }
 
-void AirSynth::set_note(unsigned channel, unsigned note, unsigned velocity)
+void AirSynth::set_note(unsigned note, unsigned velocity)
 {
-   if (instrument)
-      instrument->set_note(channel, note, velocity, sample_rate);
+   instrument.set_note(note, velocity, sample_rate);
 }
 
-void AirSynth::set_sustain(unsigned channel, bool sustain)
+void AirSynth::set_sustain(bool sustain)
 {
-   if (instrument)
-      instrument->set_sustain(channel, sustain);
+   instrument.set_sustain(sustain);
 }
 
 void AirSynth::process_audio(float **buffer, unsigned frames)
 {
-   if (instrument)
-      instrument->render(buffer, frames, channels);
+   instrument.render(buffer, frames, channels);
 }
 
-void Instrument::set_note(unsigned channel, unsigned note,
+void Instrument::set_note(unsigned note,
       unsigned velocity, unsigned sample_rate)
 {
    if (velocity == 0)
    {
       for (auto &tone : voices)
-         tone->release_note(channel, note, sustain[channel]);
+         if (note == tone->get_note())
+            tone->release(sustain);
    }
    else
    {
       auto itr = find_if(begin(voices), end(voices),
             [](const unique_ptr<Voice> &t) { return !t->active(); });
-
       if (itr == end(voices))
          return;
-      (*itr)->reset(channel, note, velocity, sample_rate);
+      (*itr)->trigger(note, velocity, sample_rate);
    }
 }
 
-void Instrument::set_sustain(unsigned channel, bool sustain)
+void Instrument::set_sustain(bool sustain)
 {
-   this->sustain[channel] = sustain;
+   this->sustain = sustain;
    if (sustain)
       return;
 
    for (auto &tone : voices)
-      tone->release_sustain(channel);
+      tone->release_sustain();
 }
 
 void Instrument::render(float **mix_buffer, unsigned frames, unsigned channels)
 {
    for (auto &tone : voices)
-   {
-      if (!tone->active())
-         continue;
-      tone->render(mix_buffer, frames, channels);
-   }
+      if (tone->active())
+         tone->render(mix_buffer, frames, channels);
 }
 
 void Instrument::reset()
 {
-   fill(begin(sustain), end(sustain), false);
+   sustain = false;
    for (auto &tone : voices)
       tone->active(false);
 }
 
-void Voice::reset(unsigned channel, unsigned note, unsigned vel, unsigned sample_rate)
+void Voice::trigger(unsigned note, unsigned vel, unsigned sample_rate)
 {
    m_velocity = vel / 127.0f;
 
    released = false;
    sustained = false;
    this->note = note;
-   this->channel = channel;
 
    this->sample_rate = sample_rate;
    time_step = 1.0 / sample_rate;
@@ -143,7 +129,7 @@ bool Voice::check_release_complete()
    {
       sustained = false;
       released = false;
-      m_active->store(false);
+      active(false);
       return true;
    }
    else
@@ -238,12 +224,12 @@ static double besseli0(double x)
 }
 
 // index range = [-1, 1)
-static double kaiser_window(double index, double beta)
+static inline double kaiser_window(double index, double beta)
 {
    return besseli0(beta * sqrt(1.0 - index * index));
 }
 
-static double sinc(double v)
+static inline double sinc(double v)
 {
    if (fabs(v) < 0.0001)
       return 1.0;
@@ -251,7 +237,7 @@ static double sinc(double v)
       return sin(v) / v;
 }
 
-PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases)
+PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases, double cutoff, double beta)
    : taps(taps), phases(phases)
 {
    buffer.resize(taps * phases);
@@ -259,7 +245,7 @@ PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases)
 
    int elems = taps * phases;
    double sidelobes = taps / 2.0;
-   double window_mod = 1.0 / kaiser_window(0.0, 7.0);
+   double window_mod = 1.0 / kaiser_window(0.0, beta);
 
    for (int i = 0; i < elems; i++)
    {
@@ -267,7 +253,7 @@ PolyphaseBank::PolyphaseBank(unsigned taps, unsigned phases)
       window_phase = 2.0 * window_phase - 1.0;
       double sinc_phase = window_phase * sidelobes;
 
-      tmp[i] = 0.75 * sinc(M_PI * 0.75 * sinc_phase) * kaiser_window(window_phase, 7.0) * window_mod;
+      tmp[i] = cutoff * sinc(M_PI * cutoff * sinc_phase) * kaiser_window(window_phase, beta) * window_mod;
    }
 
    for (unsigned t = 0; t < taps; t++)

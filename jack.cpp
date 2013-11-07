@@ -92,19 +92,33 @@ int JACKDriver::process(jack_nframes_t frames)
 {
    void *midi = jack_port_get_buffer(midi_port, frames);
    auto events = jack_midi_get_event_count(midi);
-   for (unsigned i = 0; i < events; i++)
-   {
-      jack_midi_event_t event;
-      jack_midi_event_get(&event, midi, i);
-      audio_cb->process_midi({event.buffer[0], event.buffer[1], event.buffer[2]});
-   }
 
    for (unsigned i = 0; i < target_ptrs.size(); i++)
    {
       target_ptrs[i] = static_cast<float*>(jack_port_get_buffer(audio_ports[i], frames));
       fill(target_ptrs[i], target_ptrs[i] + frames, 0.0f);
    }
-   audio_cb->process_audio(target_ptrs.data(), frames);
+
+   unsigned current_frame = 0;
+   for (unsigned i = 0; i < events; i++)
+   {
+      jack_midi_event_t event;
+      jack_midi_event_get(&event, midi, i);
+
+      // Events can come in the "future". Events must be sorted in time.
+      if (event.time > current_frame)
+      {
+         unsigned to_render = event.time - current_frame;
+         audio_cb->process_audio(target_ptrs.data(), to_render);
+         for (auto &ptr : target_ptrs)
+            ptr += to_render;
+         current_frame = event.time;
+      }
+
+      audio_cb->process_midi({event.buffer[0], event.buffer[1], event.buffer[2]});
+   }
+
+   audio_cb->process_audio(target_ptrs.data(), frames - current_frame);
 
    return 0;
 }

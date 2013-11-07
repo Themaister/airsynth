@@ -4,7 +4,6 @@ using namespace std;
 
 std::vector<blipper_sample_t> Sawtooth::filter_bank;
 Sawtooth::Sawtooth()
-   //: filter({0.0168f, 2.0f * 0.0168f, 0.0168f}, {1.0f, -1.601092, 0.66836f})
    : filter({}, {})
 {
    if (filter_bank.empty())
@@ -40,8 +39,10 @@ void Sawtooth::init_filter()
    free(filt);
 }
 
-void Sawtooth::reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate)
+void Sawtooth::trigger(unsigned note, unsigned velocity, unsigned sample_rate)
 {
+   Voice::trigger(note, velocity, sample_rate);
+
    double freq = 440.0 * pow(2.0f, (note - 69.0) / 12.0);
 
    period = unsigned(round(sample_rate * 64 / freq)); 
@@ -51,13 +52,10 @@ void Sawtooth::reset(unsigned channel, unsigned note, unsigned velocity, unsigne
    blipper_push_delta(blip, -0.1f, 0);
 
    blipper_set_ramp(blip, 0.2f, period);
-   Voice::reset(channel, note, velocity, sample_rate);
 }
 
 unsigned Sawtooth::render(float **out, unsigned frames, unsigned channels)
 {
-   lock_guard<Voice> holder{*this};
-
    while (blipper_read_avail(blip) < frames)
       blipper_push_delta(blip, delta, period);
 

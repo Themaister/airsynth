@@ -17,16 +17,12 @@
 #ifndef AIRSYNTH_HPP__
 #define AIRSYNTH_HPP__
 
-#include <thread>
-#include <mutex>
-#include <atomic>
 #include <memory>
 #include <cstdint>
 #include <vector>
 #include <deque>
 #include <random>
 #include "audio_driver.hpp"
-#include <sndfile.h>
 
 #include "blipper.h"
 
@@ -41,16 +37,14 @@ class Synthesizer : public AudioCallback
 
       void process_midi(MidiEvent event) override;
 
-      virtual void set_note(unsigned channel, unsigned note, unsigned velocity) = 0;
-      virtual void set_sustain(unsigned channel, bool enable) = 0;
+      virtual void set_note(unsigned note, unsigned velocity) = 0;
+      virtual void set_sustain(bool enable) = 0;
 
       virtual ~Synthesizer() = default;
 
    protected:
       unsigned channels = 2;
       unsigned sample_rate = 44100;
-
-      static void mixer_add(float *out, const float *in, unsigned samples);
 };
 
 struct Envelope
@@ -71,21 +65,16 @@ struct Voice
 {
    public:
       virtual unsigned render(float **out, unsigned frames, unsigned channels) = 0;
-      virtual void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate);
 
-      inline bool active() const { return m_active->load(); }
-      inline void active(bool val) { m_active->store(val); }
+      // Sub-classes of Voice should call this if overridden.
+      virtual void trigger(unsigned note, unsigned velocity, unsigned sample_rate);
 
-      bool check_release_complete();
+      inline bool active() const { return m_active; }
+      inline void active(bool val) { m_active = val; }
 
-      inline void lock() { m_lock->lock(); }
-      inline void unlock() { m_lock->unlock(); }
-
-      inline float velocity() const { return m_velocity; }
-      inline void step() { time += time_step; }
-
-      inline void set_envelope(float gain, float attack, float delay, float sustain_level,
-            float release)
+      // Voices can override this to use custom envelopes.
+      virtual inline void set_envelope(float gain, float attack, float delay,
+            float sustain_level, float release)
       {
          env.gain = gain;
          env.attack = attack;
@@ -94,25 +83,27 @@ struct Voice
          env.release = release;
       }
 
-      inline float envelope_amp() { return velocity() * env.envelope(time, released); }
-
-      inline void release_sustain(unsigned channel)
+      inline unsigned get_note() const
       {
-         if (active() && sustained && this->channel == channel)
+         return note;
+      }
+
+      // Should always be called when sustain is released.
+      inline void release_sustain()
+      {
+         if (active() && sustained)
          {
-            std::lock_guard<std::mutex> lock{*m_lock};
             released = true;
             released_time = time;
             sustained = false;
          }
       }
 
-      inline void release_note(unsigned channel, unsigned note, bool sustained)
+      // If sustained, the release will be deferred until release_sustain() is called.
+      inline void release(bool sustained)
       {
-         if (active() && this->note == note && this->channel == channel &&
-            !this->sustained && !released)
+         if (active() && !this->sustained && !released)
          {
-            std::lock_guard<std::mutex> holder{*m_lock};
             if (sustained)
                this->sustained = true;
             else
@@ -123,11 +114,16 @@ struct Voice
          }
       }
 
+   protected:
+      bool check_release_complete();
+      inline float velocity() const { return m_velocity; }
+      inline void step() { time += time_step; }
+      inline float envelope_amp() { return velocity() * env.envelope(time, released); }
+
    private:
       Envelope env;
 
       unsigned note = 0;
-      unsigned channel = 0;
       float time = 0;
       float time_step = 1.0 / 44100.0;
       float sample_rate = 44100.0;
@@ -137,14 +133,13 @@ struct Voice
       bool released = false;
       float m_velocity = 0.0f;
 
-      std::unique_ptr<std::mutex> m_lock{new std::mutex};
-      std::unique_ptr<std::atomic_bool> m_active{new std::atomic_bool(false)};
+      bool m_active = false;
 };
 
+// Uses voice-stealing algorithm to implement a multiple-voice instrument.
 class Instrument
 {
    public:
-      Instrument() { sustain.resize(16); }
       template<typename T, typename... P>
       inline void init(unsigned num_voices, const P&... p)
       {
@@ -154,20 +149,43 @@ class Instrument
       }
 
       void render(float **buffer, unsigned frames, unsigned channels);
-      void set_note(unsigned channel, unsigned note,
+      void set_note(unsigned note,
             unsigned velocity, unsigned sample_rate);
-      void set_sustain(unsigned channel, bool sustain);
+      void set_sustain(bool sustain);
 
       void reset();
 
    private:
       std::vector<std::unique_ptr<Voice>> voices;
-      std::vector<bool> sustain;
+      bool sustain = false;
+};
+
+class AirSynth : public Synthesizer
+{
+   public:
+      AirSynth();
+
+      AirSynth(AirSynth&&) = delete;
+      void operator=(AirSynth&&) = delete;
+
+      void set_note(unsigned note, unsigned velocity) override;
+      void set_sustain(bool enable) override;
+
+      void process_audio(float **buffer, unsigned frames) override;
+
+      template<typename T, typename... P>
+      void set_voices(unsigned voices, const P&&... p)
+      {
+         instrument.init<T>(voices, p...);
+      }
+
+   private:
+      Instrument instrument;
 };
 
 struct PolyphaseBank
 {
-   PolyphaseBank(unsigned taps, unsigned phases);
+   PolyphaseBank(unsigned taps = 32, unsigned phases = 1 << 13, double cutoff = 0.75, double beta = 7.0);
    std::vector<float> buffer;
    unsigned taps;
    unsigned phases;
@@ -179,7 +197,7 @@ class NoiseIIR : public Voice
       NoiseIIR(const PolyphaseBank *bank);
 
       unsigned render(float **out, unsigned frames, unsigned channels) override;
-      void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate) override;
+      void trigger(unsigned note, unsigned velocity, unsigned sample_rate) override;
 
    private:
       struct IIR
@@ -207,7 +225,7 @@ class NoiseIIR : public Voice
       const PolyphaseBank *bank = nullptr;
 
       std::default_random_engine engine;
-      std::uniform_real_distribution<float> dist{-0.01, 0.01};
+      std::uniform_real_distribution<float> dist{-0.001, 0.001};
 };
 
 class Filter 
@@ -233,7 +251,7 @@ class Square : public Voice
       Square& operator=(Square&&);
 
       unsigned render(float **out, unsigned frames, unsigned channels) override;
-      void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate) override;
+      void trigger(unsigned note, unsigned velocity, unsigned sample_rate) override;
 
    private:
       blipper_t *blip = nullptr;
@@ -257,7 +275,7 @@ class Sawtooth : public Voice
       Sawtooth& operator=(Sawtooth&&);
 
       unsigned render(float **out, unsigned frames, unsigned channels) override;
-      void reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate) override;
+      void trigger(unsigned note, unsigned velocity, unsigned sample_rate) override;
 
    private:
       blipper_t *blip = nullptr;
@@ -269,24 +287,6 @@ class Sawtooth : public Voice
       static void init_filter();
 
       Filter filter;
-};
-
-class AirSynth : public Synthesizer
-{
-   public:
-      AirSynth();
-
-      AirSynth(AirSynth&&) = delete;
-      void operator=(AirSynth&&) = delete;
-
-      void set_note(unsigned channel, unsigned note, unsigned velocity) override;
-      void set_sustain(unsigned channel, bool enable) override;
-
-      void process_audio(float **buffer, unsigned frames) override;
-
-   private:
-      PolyphaseBank filter_bank{32, 1 << 13};
-      std::shared_ptr<Instrument> instrument;
 };
 
 #endif

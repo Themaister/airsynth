@@ -5,8 +5,10 @@
 using namespace std;
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel, unsigned sample_rate)
+void NoiseIIR::trigger(unsigned note, unsigned vel, unsigned sample_rate)
 {
+   Voice::trigger(note, vel, sample_rate);
+
    history_l.clear();
    history_r.clear();
    history_l.resize(2 * history_len);
@@ -17,8 +19,6 @@ void NoiseIIR::reset(unsigned channel, unsigned note, unsigned vel, unsigned sam
    decimate_factor = unsigned(round((44100.0 / sample_rate) *
             interpolate_factor * pow(2.0f, offset / 12.0f)));
    phase = 0;
-
-   Voice::reset(channel, note, vel, sample_rate);
 }
 
 NoiseIIR::NoiseIIR(const PolyphaseBank *bank)
@@ -38,8 +38,6 @@ NoiseIIR::NoiseIIR(const PolyphaseBank *bank)
 
 unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
 {
-   lock_guard<Voice> holder{*this};
-
    unsigned s;
    for (s = 0; s < frames; s++, phase += decimate_factor)
    {

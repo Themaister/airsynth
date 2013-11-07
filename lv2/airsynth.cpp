@@ -3,7 +3,7 @@
 #include "airsynth.peg"
 #include <cmath>
 
-static PolyphaseBank filter_bank{32, 1 << 13};
+static PolyphaseBank filter_bank;
 
 class AirSynthVoice : public LV2::Voice
 {
@@ -24,20 +24,20 @@ class AirSynthVoice : public LV2::Voice
                0.05, 0.05, 0.45, 0.8
             );
 
-            noise.reset(0, key, velocity, m_rate);
+            noise.trigger(key, velocity, m_rate);
          }
       }
 
       void off(unsigned char velocity)
       {
-         noise.release_note(0, m_key, m_sustained);
+         noise.release(m_sustained);
       }
 
       void sustain(bool enable)
       {
          m_sustained = enable;
          if (!m_sustained)
-            noise.release_sustain(0);
+            noise.release_sustain();
       }
 
       unsigned char get_key() const { return m_key; }
@@ -66,7 +66,7 @@ class AirSynthLV2 : public LV2::Synth<AirSynthVoice, AirSynthLV2>
       AirSynthLV2(double rate)
          : LV2::Synth<AirSynthVoice, AirSynthLV2>(peg_n_ports, peg_midi)
       {
-         for (unsigned i = 0; i < 32; i++)
+         for (unsigned i = 0; i < 24; i++)
             add_voices(new AirSynthVoice(rate));
          add_audio_outputs(peg_output_left, peg_output_right);
       }

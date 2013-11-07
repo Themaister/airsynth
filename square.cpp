@@ -39,8 +39,10 @@ void Square::init_filter()
    free(filt);
 }
 
-void Square::reset(unsigned channel, unsigned note, unsigned velocity, unsigned sample_rate)
+void Square::trigger(unsigned note, unsigned velocity, unsigned sample_rate)
 {
+   Voice::trigger(note, velocity, sample_rate);
+
    double freq = 440.0 * pow(2.0f, (note - 69.0) / 12.0);
 
    period = unsigned(round(sample_rate * 64 / (2.0 * freq))); 
@@ -48,14 +50,10 @@ void Square::reset(unsigned channel, unsigned note, unsigned velocity, unsigned 
    delta = 0.5f;
    blipper_reset(blip);
    blipper_push_delta(blip, -0.25f, 0);
-
-   Voice::reset(channel, note, velocity, sample_rate);
 }
 
 unsigned Square::render(float **out, unsigned frames, unsigned channels)
 {
-   lock_guard<Voice> holder{*this};
-
    while (blipper_read_avail(blip) < frames)
    {
       blipper_push_delta(blip, delta, period);
@@ -79,5 +77,4 @@ unsigned Square::render(float **out, unsigned frames, unsigned channels)
 
    return s;
 }
-
 

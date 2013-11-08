@@ -1,3 +1,18 @@
+/*  AirSynth - A simple realtime softsynth for ALSA.
+ *  Copyright (C) 2013 - Hans-Kristian Arntzen
+ * 
+ *  AirSynth is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  AirSynth is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with AirSynth.
+ *  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <lv2synth.hpp>
 #include "../synth.hpp"
 #include "noise.peg"
@@ -21,7 +36,7 @@ class AirSynthVoice : public LV2::Voice
          else
          {
             m_voice.set_envelope(
-               pow(10.0f, *p(peg_gain) / 20.0f) * exp(*p(peg_rolloff) * (69.0f - key)),
+               exp(*p(peg_rolloff) * (69.0f - key)),
                *p(peg_attack), *p(peg_delay), *p(peg_sustain), *p(peg_release)
             );
 
@@ -54,6 +69,11 @@ class AirSynthVoice : public LV2::Voice
             m_key = LV2::INVALID_KEY;
       }
 
+      void panic()
+      {
+         on(LV2::INVALID_KEY, 0);
+      }
+
    private:
       unsigned char m_key;
       unsigned m_rate;
@@ -72,7 +92,7 @@ class AirSynthLV2 : public LV2::Synth<VoiceType, AirSynthLV2<VoiceType>>
       AirSynthLV2(double rate)
          : LV2::Synth<VoiceType, AirSynthLV2<VoiceType>>(peg_n_ports, peg_midi)
       {
-         for (unsigned i = 0; i < 24; i++)
+         for (unsigned i = 0; i < 64; i++)
             this->add_voices(new VoiceType(rate));
          this->add_audio_outputs(peg_output_left, peg_output_right);
       }
@@ -82,7 +102,7 @@ class AirSynthLV2 : public LV2::Synth<VoiceType, AirSynthLV2<VoiceType>>
          if (size != 3)
             return;
 
-         if ((data[0] & 0xf0) == 0x90)
+         if (size == 3 && ((data[0] & 0xf0) == 0x90))
          {
             for (auto &voice : this->m_voices)
             {
@@ -93,16 +113,21 @@ class AirSynthLV2 : public LV2::Synth<VoiceType, AirSynthLV2<VoiceType>>
                }
             }
          }
-         else if ((data[0] & 0xf0) == 0x80)
+         else if (size == 3 && ((data[0] & 0xf0) == 0x80))
          {
             for (auto &voice : this->m_voices)
                if (voice->get_key() == data[1])
                   voice->off(data[2]);
          }
-         else if ((data[0] & 0xf0) == 0xb0 && data[1] == 64) // Sustain on my CP33
+         else if (size == 3 && ((data[0] & 0xf0) == 0xb0 && data[1] == 64)) // Sustain on my CP33. Not sure if there's a standard control for sustain ...
          {
             for (auto &voice : this->m_voices)
                voice->sustain(data[2]);
+         }
+         else if (size == 1 && data[0] == 0xff)
+         {
+            for (auto &voice : this->m_voices)
+               voice->panic();
          }
       }
 };

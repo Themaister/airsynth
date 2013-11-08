@@ -8,7 +8,7 @@ Sawtooth::Sawtooth()
 {
    if (filter_bank.empty())
       init_filter();
-   blip = blipper_new(256, 0.85, 9.0, 64, 2048, filter_bank.data());
+   blip = blipper_new(64, 0.85, 8.0, 64, 2048, filter_bank.data());
 }
 
 Sawtooth::~Sawtooth()
@@ -34,8 +34,8 @@ Sawtooth::Sawtooth(Sawtooth&& square)
 
 void Sawtooth::init_filter()
 {
-   blipper_sample_t *filt = blipper_create_filter_bank(64, 256, 0.85, 9.0);
-   filter_bank.insert(end(filter_bank), filt, filt + 256 * 64);
+   blipper_sample_t *filt = blipper_create_filter_bank(64, 64, 0.85, 8.0);
+   filter_bank.insert(end(filter_bank), filt, filt + 64 * 64);
    free(filt);
 }
 

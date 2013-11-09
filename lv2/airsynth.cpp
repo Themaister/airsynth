@@ -54,15 +54,13 @@ class AirSynthVoice : public LV2::Voice
             env.sustain_level = clamp(*p(peg_sustain), peg_ports[peg_sustain].min, peg_ports[peg_sustain].max);
             env.release = clamp(*p(peg_release), peg_ports[peg_release].min, peg_ports[peg_release].max);
 
-            float detune_factor = clamp(*p(peg_detune), peg_ports[peg_detune].min, peg_ports[peg_detune].max);
-            float voices = round(clamp(*p(peg_num_osc), peg_ports[peg_num_osc].min, peg_ports[peg_num_osc].max));
-            m_num_voices = unsigned(voices);
+            m_num_voices = unsigned(round(clamp(*p(peg_num_osc), peg_ports[peg_num_osc].min, peg_ports[peg_num_osc].max)));
 
             for (unsigned i = 0; i < m_num_voices; i++)
             {
-               float detune_mod = i - voices * 0.5f;
                m_voice[i].set_envelope(env);
-               m_voice[i].trigger(key, velocity, m_rate, detune_mod * detune_factor);
+               m_voice[i].trigger(key, velocity, m_rate,
+                     clamp(*p(peg_detune0 + i), peg_ports[peg_detune0 + i].min, peg_ports[peg_detune0 + i].max));
             }
          }
       }
@@ -107,7 +105,7 @@ class AirSynthVoice : public LV2::Voice
       unsigned m_rate;
       bool m_sustained = false;
       unsigned m_num_voices = 1;
-      VoiceType m_voice[8];
+      VoiceType m_voice[4];
 };
 
 using AirSynthNoiseIIR = AirSynthVoice<NoiseIIR>;

@@ -12,6 +12,7 @@ Sustain pedal is "supported". The sustain signal is assumed to have control ID #
 The feature set is quite sparse. There is currently no GUI, but the LV2 plugin has some basic tweakables which you can tweak with sliders:
 
 - Standard ADSR. Attack and delay are linear, release rolls off exponentially.
+- Up to 4 oscillators per voice, with per-oscillator detuning. This gives a really "phat" sound for especially sawtooth.
 - Velocity rolloff for high notes. Noise/IIR instrument has a tendency to have a lower volume for bass notes. The rolloff boosts volume for lower notes, and lowers it for higher notes.
 
 ### Building LV2 plugin

@@ -7,18 +7,16 @@ using namespace std;
 PolyphaseBank NoiseIIR::static_bank;
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-void NoiseIIR::trigger(unsigned note, unsigned vel, unsigned sample_rate)
+void NoiseIIR::trigger(unsigned note, unsigned vel, unsigned sample_rate, float detune)
 {
    Voice::trigger(note, vel, sample_rate);
 
-   history_l.clear();
-   history_r.clear();
-   history_l.resize(2 * history_len);
-   history_r.resize(2 * history_len);
+   fill(begin(history_l), end(history_l), 0.0f);
+   fill(begin(history_r), end(history_r), 0.0f);
    history_ptr = 0;
 
    float offset = note - (69.0f + 7.0f);
-   decimate_factor = unsigned(round((44100.0 / sample_rate) *
+   decimate_factor = unsigned(round(((1.0f + detune) * 44100.0f / sample_rate) *
             interpolate_factor * pow(2.0f, offset / 12.0f)));
    phase = 0;
 }

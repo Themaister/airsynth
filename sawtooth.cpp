@@ -39,11 +39,11 @@ void Sawtooth::init_filter()
    free(filt);
 }
 
-void Sawtooth::trigger(unsigned note, unsigned velocity, unsigned sample_rate)
+void Sawtooth::trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune)
 {
    Voice::trigger(note, velocity, sample_rate);
 
-   double freq = 440.0 * pow(2.0f, (note - 69.0) / 12.0);
+   double freq = (1.0f + detune) * 440.0f * pow(2.0f, (note - 69.0f) / 12.0f);
 
    period = unsigned(round(sample_rate * 64 / freq)); 
 

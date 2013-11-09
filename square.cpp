@@ -39,11 +39,11 @@ void Square::init_filter()
    free(filt);
 }
 
-void Square::trigger(unsigned note, unsigned velocity, unsigned sample_rate)
+void Square::trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune)
 {
    Voice::trigger(note, velocity, sample_rate);
 
-   double freq = 440.0 * pow(2.0f, (note - 69.0) / 12.0);
+   float freq = (1.0f + detune) * 440.0f * pow(2.0f, (note - 69.0f) / 12.0f);
 
    period = unsigned(round(sample_rate * 64 / (2.0 * freq))); 
 

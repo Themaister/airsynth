@@ -107,7 +107,7 @@ void Instrument::reset()
       tone->active(false);
 }
 
-void Voice::trigger(unsigned note, unsigned vel, unsigned sample_rate)
+void Voice::trigger(unsigned note, unsigned vel, unsigned sample_rate, float)
 {
    m_velocity = vel / 127.0f;
 

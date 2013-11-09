@@ -67,7 +67,7 @@ struct Voice
       virtual unsigned render(float **out, unsigned frames, unsigned channels) = 0;
 
       // Sub-classes of Voice should call this if overridden.
-      virtual void trigger(unsigned note, unsigned velocity, unsigned sample_rate);
+      virtual void trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune = 0.0f);
 
       inline bool active() const { return m_active; }
       inline void active(bool val) { m_active = val; }
@@ -81,6 +81,11 @@ struct Voice
          env.delay = delay;
          env.sustain_level = sustain_level;
          env.release = release;
+      }
+
+      virtual inline void set_envelope(const Envelope &env)
+      {
+         this->env = env;
       }
 
       inline unsigned get_note() const
@@ -198,7 +203,7 @@ class NoiseIIR : public Voice
       NoiseIIR(const PolyphaseBank *bank);
 
       unsigned render(float **out, unsigned frames, unsigned channels) override;
-      void trigger(unsigned note, unsigned velocity, unsigned sample_rate) override;
+      void trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune) override;
 
    private:
       struct IIR
@@ -252,7 +257,7 @@ class Square : public Voice
       Square& operator=(Square&&);
 
       unsigned render(float **out, unsigned frames, unsigned channels) override;
-      void trigger(unsigned note, unsigned velocity, unsigned sample_rate) override;
+      void trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune) override;
 
    private:
       blipper_t *blip = nullptr;
@@ -276,7 +281,7 @@ class Sawtooth : public Voice
       Sawtooth& operator=(Sawtooth&&);
 
       unsigned render(float **out, unsigned frames, unsigned channels) override;
-      void trigger(unsigned note, unsigned velocity, unsigned sample_rate) override;
+      void trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune) override;
 
    private:
       blipper_t *blip = nullptr;

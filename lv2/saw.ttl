@@ -16,6 +16,7 @@
 <git://github.com/Themaister/airsynth/saw>
   a lv2:Plugin, lv2:InstrumentPlugin;
   lv2:binary <airsynth.so>;
+  lv2:Feature lv2:hardRTCapable;
   doap:name "AirSynth Saw";
   doap:license <http://usefulinc.com/doap/licenses/gpl>;
   doap:shortdesc "Bandlimited Sawtooth generator";
@@ -56,7 +57,7 @@
     lv2:index 3;
     lv2:symbol "attack";
     lv2:name "Attack";
-    lv2:minimum 0.005;
+    lv2:minimum 0.001;
     lv2:maximum 2.0;
     lv2:default 0.05;
   ],
@@ -66,7 +67,7 @@
     lv2:index 4;
     lv2:symbol "delay";
     lv2:name "Delay";
-    lv2:minimum 0.005;
+    lv2:minimum 0.001;
     lv2:maximum 2.0;
     lv2:default 0.05;
   ],
@@ -99,5 +100,26 @@
     lv2:minimum 0;
     lv2:maximum 0.1;
     lv2:default 0;
+  ],
+
+  [
+    a lv2:ControlPort, lv2:InputPort;
+    lv2:index 8;
+    lv2:symbol "detune";
+    lv2:name "Detune";
+    lv2:minimum -0.05;
+    lv2:maximum 0.05;
+    lv2:default 0.0;
+  ],
+
+  [
+    a lv2:ControlPort, lv2:InputPort;
+    lv2:index 9;
+    lv2:symbol "num_osc";
+    lv2:name "Oscillators";
+    lv2:minimum 1;
+    lv2:maximum 8;
+    lv2:default 1;
+    lv2:portProperty lv2:integer;
   ].
 

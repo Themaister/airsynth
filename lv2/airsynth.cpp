@@ -20,6 +20,15 @@
 
 using namespace std;
 
+static inline float clamp(float v, float minimum, float maximum)
+{
+   if (v < minimum)
+      return minimum;
+   else if (v > maximum)
+      return maximum;
+   return v;
+}
+
 template<typename VoiceType>
 class AirSynthVoice : public LV2::Voice
 {
@@ -32,28 +41,46 @@ class AirSynthVoice : public LV2::Voice
       {
          m_key = key;
          if (key == LV2::INVALID_KEY)
-            m_voice.active(false);
+         {
+            for (auto &voice : m_voice)
+               voice.active(false);
+         }
          else
          {
-            m_voice.set_envelope(
-               exp(*p(peg_rolloff) * (69.0f - key)),
-               *p(peg_attack), *p(peg_delay), *p(peg_sustain), *p(peg_release)
-            );
+            Envelope env;
+            env.gain = exp(clamp(*p(peg_rolloff), peg_ports[peg_rolloff].min, peg_ports[peg_rolloff].max) * (69.0f - key));
+            env.attack = clamp(*p(peg_attack), peg_ports[peg_attack].min, peg_ports[peg_attack].max);
+            env.delay = clamp(*p(peg_delay), peg_ports[peg_delay].min, peg_ports[peg_delay].max);
+            env.sustain_level = clamp(*p(peg_sustain), peg_ports[peg_sustain].min, peg_ports[peg_sustain].max);
+            env.release = clamp(*p(peg_release), peg_ports[peg_release].min, peg_ports[peg_release].max);
 
-            m_voice.trigger(key, velocity, m_rate);
+            float detune_factor = clamp(*p(peg_detune), peg_ports[peg_detune].min, peg_ports[peg_detune].max);
+            float voices = round(clamp(*p(peg_num_osc), peg_ports[peg_num_osc].min, peg_ports[peg_num_osc].max));
+            m_num_voices = unsigned(voices);
+
+            for (unsigned i = 0; i < m_num_voices; i++)
+            {
+               float detune_mod = i - voices * 0.5f;
+               m_voice[i].set_envelope(env);
+               m_voice[i].trigger(key, velocity, m_rate, detune_mod * detune_factor);
+            }
          }
       }
 
       void off(unsigned char velocity)
       {
-         m_voice.release(m_sustained);
+         for (unsigned i = 0; i < m_num_voices; i++)
+            m_voice[i].release(m_sustained);
       }
 
       void sustain(bool enable)
       {
          m_sustained = enable;
          if (!m_sustained)
-            m_voice.release_sustain();
+         {
+            for (unsigned i = 0; i < m_num_voices; i++)
+               m_voice[i].release_sustain();
+         }
       }
 
       unsigned char get_key() const { return m_key; }
@@ -64,8 +91,9 @@ class AirSynthVoice : public LV2::Voice
             return;
 
          float *buf[2] = { p(peg_output_left) + from, p(peg_output_right) + from };
-         m_voice.render(buf, to - from, 2);
-         if (!m_voice.active())
+         for (unsigned i = 0; i < m_num_voices; i++)
+            m_voice[i].render(buf, to - from, 2);
+         if (!m_voice[0].active())
             m_key = LV2::INVALID_KEY;
       }
 
@@ -78,7 +106,8 @@ class AirSynthVoice : public LV2::Voice
       unsigned char m_key;
       unsigned m_rate;
       bool m_sustained = false;
-      VoiceType m_voice;
+      unsigned m_num_voices = 1;
+      VoiceType m_voice[8];
 };
 
 using AirSynthNoiseIIR = AirSynthVoice<NoiseIIR>;

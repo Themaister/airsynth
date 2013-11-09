@@ -4,7 +4,7 @@ INSTALL_DIR = /usr/lib/lv2
 SOURCE := airsynth.cpp ../synth.cpp ../noiseiir.cpp ../sawtooth.cpp ../square.cpp
 CSOURCE := ../blipper.c
 OBJECTS := $(SOURCE:.cpp=.o) $(CSOURCE:.c=.o)
-TTL_FILES := $(wildcard *.ttl)
+TTL_FILES := noise.ttl saw.ttl square.ttl
 
 LDFLAGS += -fPIC $(shell pkg-config lv2-plugin --libs) -shared -Wl,-no-undefined
 CXXFLAGS += -fPIC $(shell pkg-config lv2-plugin --cflags) -std=gnu++11 -Wall -pedantic -DBLIPPER_FIXED_POINT=0
@@ -20,13 +20,16 @@ endif
 
 all: $(BUNDLE)
 
-$(BUNDLE): $(TTL_FILES) airsynth.so
+$(BUNDLE): $(TTL_FILES) manifest.ttl airsynth.so
 	rm -rf $(BUNDLE)
 	mkdir $(BUNDLE)
-	install -m644 $(TTL_FILES) airsynth.so $(BUNDLE)
+	install -m644 $(TTL_FILES) manifest.ttl airsynth.so $(BUNDLE)
 
 noise.peg: noise.ttl
 	lv2peg $< $@
+
+%.ttl: %.ttl.in
+	cat $< options.ttl.in > $@
 
 airsynth.so: $(OBJECTS)
 	$(CXX) -o $@ $^ $(LDFLAGS)
@@ -41,7 +44,7 @@ install:
 	cp -r $(BUNDLE) $(INSTALL_DIR)
 
 clean:
-	rm -rf $(BUNDLE) airsynth.so $(OBJECTS) *.peg
+	rm -rf $(BUNDLE) $(TTL_FILES) airsynth.so $(OBJECTS) *.peg
 
 .PHONY: clean
 

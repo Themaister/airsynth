@@ -9,7 +9,7 @@ Square::Square()
 {
    if (filter_bank.empty())
       init_filter();
-   blip = blipper_new(64, 0.85, 8.0, 64, 4 * 1024, filter_bank.data());
+   blip = blipper_new(64, 0.85, 8.0, 64, 16 * 1024, filter_bank.data());
 }
 
 Square::~Square()

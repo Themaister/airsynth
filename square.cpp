@@ -1,4 +1,5 @@
 #include "synth.hpp"
+#include <algorithm>
 
 using namespace std;
 
@@ -8,7 +9,7 @@ Square::Square()
 {
    if (filter_bank.empty())
       init_filter();
-   blip = blipper_new(64, 0.85, 8.0, 64, 2048, filter_bank.data());
+   blip = blipper_new(64, 0.85, 8.0, 64, 4 * 1024, filter_bank.data());
 }
 
 Square::~Square()
@@ -54,6 +55,8 @@ void Square::trigger(unsigned note, unsigned velocity, unsigned sample_rate, flo
 
 unsigned Square::render(float **out, unsigned frames, unsigned channels)
 {
+   blipper_sample_t stage_buffer[256];
+   blipper_sample_t env_buffer[256];
    while (blipper_read_avail(blip) < frames)
    {
       blipper_push_delta(blip, delta, period);
@@ -61,18 +64,28 @@ unsigned Square::render(float **out, unsigned frames, unsigned channels)
    }
 
    unsigned s;
-   for (s = 0; s < frames; s++)
+   for (s = 0; s < frames; )
    {
       if (check_release_complete())
          break;
 
-      blipper_sample_t val = 0;
-      blipper_read(blip, &val, 1, 1);
-      float res = filter.process(val) * envelope_amp();
-      for (unsigned c = 0; c < channels; c++)
-         out[c][s] += res;
+      unsigned process_frames = min(256u, frames - s);
+      blipper_read(blip, stage_buffer, process_frames, 1);
 
-      step();
+      for (unsigned i = 0; i < process_frames; i++)
+      {
+         env_buffer[i] = filter.process(stage_buffer[i]) * envelope_amp();
+         step();
+      }
+
+      for (unsigned c = 0; c < channels; c++)
+      {
+         float *buf = out[c] + s;
+         for (unsigned i = 0; i < process_frames; i++)
+            buf[i] += env_buffer[i];
+      }
+
+      s += process_frames;
    }
 
    return s;

@@ -58,7 +58,25 @@ struct Envelope
 
    float time_step = 1.0 / 44100.0;
 
-   float envelope(float time, bool released);
+   inline float envelope(float time, bool released)
+   {
+      if (released)
+      {
+         float release_factor = 8.0f * time_step / release;
+         amp -= amp * release_factor;
+      }
+      else if (time >= attack + delay)
+         amp = sustain_level;
+      else if (time >= attack)
+      {
+         float lerp = (time - attack) / delay;
+         amp = (1.0f - lerp) + sustain_level * lerp;
+      }
+      else
+         amp = time / attack;
+
+      return gain * amp;
+   }
 };
 
 struct Voice
@@ -239,7 +257,24 @@ class Filter
    public:
       Filter();
       Filter(std::vector<float> b, std::vector<float> a);
-      float process(float samp);
+
+      inline float process(float samp)
+      {
+         float iir_sum = samp;
+         for (unsigned i = 1; i < a.size(); i++)
+            iir_sum -= a[i] * buffer[i - 1];
+         iir_sum /= a[0];
+
+         buffer.push_front(iir_sum);
+
+         float fir_sum = 0.0f;
+         for (unsigned i = 0; i < b.size(); i++)
+            fir_sum += buffer[i] * b[i];
+
+         buffer.pop_back();
+         return fir_sum;
+      }
+
       void reset();
 
    private:

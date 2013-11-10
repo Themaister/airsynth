@@ -150,48 +150,11 @@ Filter::Filter()
    : Filter({}, {})
 {}
 
-float Filter::process(float samp)
-{
-   float iir_sum = samp;
-   for (unsigned i = 1; i < a.size(); i++)
-      iir_sum -= a[i] * buffer[i - 1];
-   iir_sum /= a[0];
-
-   buffer.push_front(iir_sum);
-
-   float fir_sum = 0.0f;
-   for (unsigned i = 0; i < b.size(); i++)
-      fir_sum += buffer[i] * b[i];
-
-   buffer.pop_back();
-   return fir_sum;
-}
-
 void Filter::reset()
 {
    buffer.clear();
    auto len = max(a.size(), b.size()) - 1;
    buffer.resize(len);
-}
-
-float Envelope::envelope(float time, bool released)
-{
-   if (released)
-   {
-      float release_factor = 8.0 * time_step / release;
-      amp -= amp * release_factor;
-   }
-   else if (time >= attack + delay)
-      amp = sustain_level;
-   else if (time >= attack)
-   {
-      float lerp = (time - attack) / delay;
-      amp = (1.0 - lerp) + sustain_level * lerp;
-   }
-   else
-      amp = time / attack;
-
-   return gain * amp;
 }
 
 #ifndef M_PI

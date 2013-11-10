@@ -25,10 +25,10 @@ $(BUNDLE): $(TTL_FILES) manifest.ttl airsynth.so
 	mkdir $(BUNDLE)
 	install -m644 $(TTL_FILES) manifest.ttl airsynth.so $(BUNDLE)
 
-noise.peg: noise.ttl
+noise.peg: noise.ttl options.ttl.in
 	lv2peg $< $@
 
-%.ttl: %.ttl.in
+%.ttl: %.ttl.in options.ttl.in
 	cat $< options.ttl.in > $@
 
 airsynth.so: $(OBJECTS)

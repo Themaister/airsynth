@@ -58,8 +58,10 @@ class AirSynthVoice : public LV2::Voice
 
             for (unsigned i = 0; i < m_num_voices; i++)
             {
+               int transpose = int(*p(peg_transpose0 + i));
+               int out_key = max(int(key) + transpose, 0);
                m_voice[i].set_envelope(env);
-               m_voice[i].trigger(key, velocity, m_rate,
+               m_voice[i].trigger(out_key, velocity, m_rate,
                      clamp(*p(peg_detune0 + i), peg_ports[peg_detune0 + i].min, peg_ports[peg_detune0 + i].max));
             }
          }

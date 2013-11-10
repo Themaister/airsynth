@@ -62,6 +62,47 @@
   [
     a lv2:ControlPort, lv2:InputPort;
     lv2:index 9;
+    lv2:symbol "transpose0";
+    lv2:name "Transpose Osc #1";
+    lv2:minimum -24;
+    lv2:maximum 24;
+    lv2:default 0;
+    lv2:portProperty lv2:integer;
+  ],
+  [
+    a lv2:ControlPort, lv2:InputPort;
+    lv2:index 10;
+    lv2:symbol "transpose1";
+    lv2:name "Transpose Osc #2";
+    lv2:minimum -24;
+    lv2:maximum 24;
+    lv2:default 0;
+    lv2:portProperty lv2:integer;
+  ],
+  [
+    a lv2:ControlPort, lv2:InputPort;
+    lv2:index 11;
+    lv2:symbol "transpose2";
+    lv2:name "Transpose Osc #3";
+    lv2:minimum -24;
+    lv2:maximum 24;
+    lv2:default 0;
+    lv2:portProperty lv2:integer;
+  ],
+  [
+    a lv2:ControlPort, lv2:InputPort;
+    lv2:index 12;
+    lv2:symbol "transpose3";
+    lv2:name "Transpose Osc #4";
+    lv2:minimum -24;
+    lv2:maximum 24;
+    lv2:default 0;
+    lv2:portProperty lv2:integer;
+  ],
+
+  [
+    a lv2:ControlPort, lv2:InputPort;
+    lv2:index 13;
     lv2:symbol "detune0";
     lv2:name "Detune Osc #1";
     lv2:minimum -0.05;
@@ -70,7 +111,7 @@
   ],
   [
     a lv2:ControlPort, lv2:InputPort;
-    lv2:index 10;
+    lv2:index 14;
     lv2:symbol "detune1";
     lv2:name "Detune Osc #2";
     lv2:minimum -0.05;
@@ -79,7 +120,7 @@
   ],
   [
     a lv2:ControlPort, lv2:InputPort;
-    lv2:index 11;
+    lv2:index 15;
     lv2:symbol "detune2";
     lv2:name "Detune Osc #3";
     lv2:minimum -0.05;
@@ -88,7 +129,7 @@
   ],
   [
     a lv2:ControlPort, lv2:InputPort;
-    lv2:index 12;
+    lv2:index 16;
     lv2:symbol "detune3";
     lv2:name "Detune Osc #4";
     lv2:minimum -0.05;

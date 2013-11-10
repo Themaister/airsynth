@@ -47,6 +47,11 @@ void Square::trigger(unsigned note, unsigned velocity, unsigned sample_rate, flo
    float freq = (1.0f + detune) * 440.0f * pow(2.0f, (note - 69.0f) / 12.0f);
 
    period = unsigned(round(sample_rate * 64 / (2.0 * freq))); 
+   if (period > 16 * 1024 * 64)
+   {
+      active(false);
+      return;
+   }
 
    delta = 0.5f;
    blipper_reset(blip);

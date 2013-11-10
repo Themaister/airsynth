@@ -47,6 +47,11 @@ void Sawtooth::trigger(unsigned note, unsigned velocity, unsigned sample_rate, f
    double freq = (1.0f + detune) * 440.0f * pow(2.0f, (note - 69.0f) / 12.0f);
 
    period = unsigned(round(sample_rate * 64 / freq)); 
+   if (period > 16 * 1024 * 64)
+   {
+      active(false);
+      return;
+   }
 
    delta = -0.2f;
    blipper_reset(blip);

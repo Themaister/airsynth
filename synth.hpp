@@ -82,7 +82,7 @@ struct Envelope
 struct Voice
 {
    public:
-      virtual unsigned render(float **out, unsigned frames, unsigned channels) = 0;
+      virtual unsigned render(float **out, const float *amp, unsigned frames, unsigned channels) = 0;
 
       // Sub-classes of Voice should call this if overridden.
       virtual void trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune = 0.0f);
@@ -171,7 +171,7 @@ class Instrument
             voices.push_back(std::unique_ptr<Voice>(new T(p...)));
       }
 
-      void render(float **buffer, unsigned frames, unsigned channels);
+      void render(float **buffer, const float *amp, unsigned frames, unsigned channels);
       void set_note(unsigned note,
             unsigned velocity, unsigned sample_rate);
       void set_sustain(bool sustain);
@@ -194,7 +194,7 @@ class AirSynth : public Synthesizer
       void set_note(unsigned note, unsigned velocity) override;
       void set_sustain(bool enable) override;
 
-      void process_audio(float **buffer, unsigned frames) override;
+      void process_audio(float **buffer, const float *amp, unsigned frames) override;
 
       template<typename T, typename... P>
       void set_voices(unsigned voices, const P&&... p)
@@ -220,7 +220,7 @@ class NoiseIIR : public Voice
       NoiseIIR();
       NoiseIIR(const PolyphaseBank *bank);
 
-      unsigned render(float **out, unsigned frames, unsigned channels) override;
+      unsigned render(float **out, const float *amp, unsigned frames, unsigned channels) override;
       void trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune) override;
 
    private:
@@ -291,7 +291,7 @@ class Square : public Voice
       Square(Square&&);
       Square& operator=(Square&&);
 
-      unsigned render(float **out, unsigned frames, unsigned channels) override;
+      unsigned render(float **out, const float *amp, unsigned frames, unsigned channels) override;
       void trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune) override;
 
    private:
@@ -315,7 +315,7 @@ class Sawtooth : public Voice
       Sawtooth(Sawtooth&&);
       Sawtooth& operator=(Sawtooth&&);
 
-      unsigned render(float **out, unsigned frames, unsigned channels) override;
+      unsigned render(float **out, const float *amp, unsigned frames, unsigned channels) override;
       void trigger(unsigned note, unsigned velocity, unsigned sample_rate, float detune) override;
 
    private:

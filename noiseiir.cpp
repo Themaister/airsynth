@@ -40,7 +40,7 @@ NoiseIIR::NoiseIIR()
    : NoiseIIR(&static_bank)
 {}
 
-unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
+unsigned NoiseIIR::render(float **out, const float *amp, unsigned frames, unsigned channels)
 {
    unsigned s;
    for (s = 0; s < frames; s++, phase += decimate_factor)
@@ -70,7 +70,7 @@ unsigned NoiseIIR::render(float **out, unsigned frames, unsigned channels)
 
       float env_mod = envelope_amp();
       for (unsigned c = 0; c < channels; c++)
-         out[c][s] += env_mod * res[c & 1];
+         out[c][s] += amp[c] * env_mod * res[c & 1];
 
       step();
    }

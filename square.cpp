@@ -58,7 +58,7 @@ void Square::trigger(unsigned note, unsigned velocity, unsigned sample_rate, flo
    blipper_push_delta(blip, -0.25f, 0);
 }
 
-unsigned Square::render(float **out, unsigned frames, unsigned channels)
+unsigned Square::render(float **out, const float *amp, unsigned frames, unsigned channels)
 {
    blipper_sample_t stage_buffer[256];
    blipper_sample_t env_buffer[256];
@@ -86,8 +86,9 @@ unsigned Square::render(float **out, unsigned frames, unsigned channels)
       for (unsigned c = 0; c < channels; c++)
       {
          float *buf = out[c] + s;
+         float amp_tmp = amp[c];
          for (unsigned i = 0; i < process_frames; i++)
-            buf[i] += env_buffer[i];
+            buf[i] += amp_tmp * env_buffer[i];
       }
 
       s += process_frames;

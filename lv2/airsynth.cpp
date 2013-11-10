@@ -92,7 +92,11 @@ class AirSynthVoice : public LV2::Voice
 
          float *buf[2] = { p(peg_output_left) + from, p(peg_output_right) + from };
          for (unsigned i = 0; i < m_num_voices; i++)
-            m_voice[i].render(buf, to - from, 2);
+         {
+            float panning = clamp(*p(peg_pan0 + i), -1.0f, 1.0f);
+            float amp[2] = { min(1.0f - panning, 1.0f), min(1.0f + panning, 1.0f) };
+            m_voice[i].render(buf, amp, to - from, 2);
+         }
          if (!m_voice[0].active())
             m_key = LV2::INVALID_KEY;
       }

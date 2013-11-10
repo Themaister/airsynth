@@ -59,9 +59,9 @@ void AirSynth::set_sustain(bool sustain)
    instrument.set_sustain(sustain);
 }
 
-void AirSynth::process_audio(float **buffer, unsigned frames)
+void AirSynth::process_audio(float **buffer, const float *amp, unsigned frames)
 {
-   instrument.render(buffer, frames, channels);
+   instrument.render(buffer, amp, frames, channels);
 }
 
 void Instrument::set_note(unsigned note,
@@ -93,11 +93,11 @@ void Instrument::set_sustain(bool sustain)
       tone->release_sustain();
 }
 
-void Instrument::render(float **mix_buffer, unsigned frames, unsigned channels)
+void Instrument::render(float **mix_buffer, const float *amp, unsigned frames, unsigned channels)
 {
    for (auto &tone : voices)
       if (tone->active())
-         tone->render(mix_buffer, frames, channels);
+         tone->render(mix_buffer, amp, frames, channels);
 }
 
 void Instrument::reset()

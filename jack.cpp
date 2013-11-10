@@ -82,6 +82,8 @@ bool JACKDriver::init(unsigned channels)
    fprintf(stderr, "Got JACK sample rate: %u Hz.\n", sample_rate);
    audio_cb->configure_audio(sample_rate, channels);
 
+   amps.insert(end(amps), channels, 1.0f);
+
    if (jack_activate(client) < 0)
       return false;
 
@@ -109,7 +111,7 @@ int JACKDriver::process(jack_nframes_t frames)
       if (event.time > current_frame)
       {
          unsigned to_render = event.time - current_frame;
-         audio_cb->process_audio(target_ptrs.data(), to_render);
+         audio_cb->process_audio(target_ptrs.data(), amps.data(), to_render);
          for (auto &ptr : target_ptrs)
             ptr += to_render;
          current_frame = event.time;
@@ -118,7 +120,7 @@ int JACKDriver::process(jack_nframes_t frames)
       audio_cb->process_midi({event.buffer[0], event.buffer[1], event.buffer[2]});
    }
 
-   audio_cb->process_audio(target_ptrs.data(), frames - current_frame);
+   audio_cb->process_audio(target_ptrs.data(), amps.data(), frames - current_frame);
 
    return 0;
 }

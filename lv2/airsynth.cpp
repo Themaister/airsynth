@@ -153,10 +153,20 @@ class AirSynthLV2 : public LV2::Synth<VoiceType, AirSynthLV2<VoiceType>>
             for (auto &voice : this->m_voices)
                voice->sustain(data[2]);
          }
-         else if (size == 1 && data[0] == 0xff)
+         else if ((size == 1 && data[0] == 0xff) ||
+                  (size == 3 && ((data[0] & 0xf0) == 0xb0) && data[1] == 120)) // Reset, All Sound Off
          {
             for (auto &voice : this->m_voices)
                voice->panic();
+         }
+         else if ((size == 3 && ((data[0] & 0xf0) == 0xb0) && data[1] == 123) ||
+                     (size == 1 && data[0] == 0xfc)) // All Notes Off, STOP
+         {
+            for (auto &voice : this->m_voices)
+            {
+               voice->sustain(false);
+               voice->off(0);
+            }
          }
       }
 };
